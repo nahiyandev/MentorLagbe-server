@@ -7,6 +7,8 @@ const connectDB = require("./config/db");
 
 const app = express();
 const tuitionsRoutes = require("./routes/tuitions");
+const applicationsRoutes = require("./routes/applications");
+
 
 
 // CORS: শুধু আমাদের client (Next.js) যেন API-তে কথা বলতে পারে
@@ -30,6 +32,8 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api/tuitions", tuitionsRoutes);
+app.use("/api/applications", applicationsRoutes);
+
 
 
 // 404 — কোনো route না মিললে
