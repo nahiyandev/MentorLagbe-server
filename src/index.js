@@ -1,6 +1,6 @@
 // MentorLagbe server — entry point
-// কাজ: Express app চালু করা, MongoDB-তে connect করা, route গুলো mount করা
-require("dotenv").config(); // .env ফাইল থেকে secret/variable পড়ে (PORT, MONGODB_URI...)
+
+require("dotenv").config(); 
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
@@ -21,9 +21,10 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.json({ message: "MentorLagbe server is running" });
 });
-app.get("/health", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
 
 // 404 — কোনো route না মিললে
 app.use((req, res) => {
