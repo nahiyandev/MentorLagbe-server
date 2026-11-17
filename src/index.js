@@ -8,6 +8,8 @@ const connectDB = require("./config/db");
 const app = express();
 const tuitionsRoutes = require("./routes/tuitions");
 const applicationsRoutes = require("./routes/applications");
+const adminRoutes = require("./routes/admin");
+
 
 
 
@@ -33,6 +35,8 @@ app.get("/api/health", (req, res) => {
 
 app.use("/api/tuitions", tuitionsRoutes);
 app.use("/api/applications", applicationsRoutes);
+app.use("/api/admin", adminRoutes);
+
 
 
 
