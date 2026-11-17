@@ -9,6 +9,7 @@ const app = express();
 const tuitionsRoutes = require("./routes/tuitions");
 const applicationsRoutes = require("./routes/applications");
 const adminRoutes = require("./routes/admin");
+const authRoutes = require("./routes/auth");
 
 
 
@@ -36,6 +37,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api/tuitions", tuitionsRoutes);
 app.use("/api/applications", applicationsRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/auth", authRoutes);
 
 
 
