@@ -21,7 +21,7 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.json({ message: "MentorLagbe server is running" });
 });
-app.get("/api/health", (req, res) => {
+app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
