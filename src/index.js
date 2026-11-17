@@ -34,7 +34,14 @@ const PORT = process.env.PORT || 5000;
 
 // আগে DB connect, তারপর server চালু — DB ছাড়া server চালিয়ে লাভ নেই
 connectDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`MentorLagbe server running on port ${PORT}`);
-  });
+  // Vercel-এ (serverless) app.listen চলবে না — Vercel নিজে app-টা চালায়
+  if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+      console.log(`MentorLagbe server running on port ${PORT}`);
+    });
+  }
 });
+
+// Vercel-এর জন্য app export — api/index.js এটা ধরে
+module.exports = app;
+
