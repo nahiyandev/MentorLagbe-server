@@ -6,6 +6,8 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 
 const app = express();
+const tuitionsRoutes = require("./routes/tuitions");
+
 
 // CORS: শুধু আমাদের client (Next.js) যেন API-তে কথা বলতে পারে
 app.use(
@@ -21,9 +23,13 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.json({ message: "MentorLagbe server is running" });
 });
+
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
+app.use("/api/tuitions", tuitionsRoutes);
 
 
 // 404 — কোনো route না মিললে
