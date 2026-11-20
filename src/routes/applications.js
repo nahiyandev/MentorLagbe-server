@@ -97,6 +97,7 @@ router.patch("/:id/status", verifyToken, verifyTutor, async (req, res) => {
     const application = await Application.findOne({ _id: req.params.id, tutorEmail: req.user.email });
     if (!application) return res.status(404).json({ message: "Application not found" });
     application.status = status;
+    application.decidedAt = new Date();
     await application.save();
 
     // Notify student about application acceptance or rejection
@@ -119,6 +120,41 @@ router.patch("/:id/status", verifyToken, verifyTutor, async (req, res) => {
     res.json(application);
   } catch (error) {
     res.status(500).json({ message: "Failed to update application" });
+  }
+});
+
+// PATCH /api/applications/:id — student only, pending applications can be edited
+// Body: { studentPhone, preferredSchedule, studentNote }
+router.patch("/:id", verifyToken, verifyStudent, async (req, res) => {
+  try {
+    const { studentPhone, preferredSchedule, studentNote } = req.body;
+    if (!studentPhone && !preferredSchedule && studentNote === undefined) {
+      return res.status(400).json({ message: "No fields provided to update" });
+    }
+
+    const application = await Application.findOne({
+      _id: req.params.id,
+      studentEmail: req.user.email,
+    });
+    if (!application) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
+    if (application.status !== "pending") {
+      return res.status(400).json({
+        message: "Only pending applications can be edited",
+      });
+    }
+
+    if (studentPhone) application.studentPhone = studentPhone.trim();
+    if (preferredSchedule) application.preferredSchedule = preferredSchedule.trim();
+    if (studentNote !== undefined) application.studentNote = studentNote.trim();
+
+    await application.save();
+    res.json(application);
+  } catch (error) {
+    console.error("Failed to update application:", error);
+    res.status(500).json({ message: error.message || "Failed to update application" });
   }
 });
 
