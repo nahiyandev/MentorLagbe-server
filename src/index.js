@@ -11,6 +11,7 @@ const applicationsRoutes = require("./routes/applications");
 const adminRoutes = require("./routes/admin");
 const authRoutes = require("./routes/auth");
 const profileRoutes = require("./routes/profile");
+const paymentsRoutes = require("./routes/payments");
 
 
 
@@ -40,8 +41,14 @@ app.use(
     credentials: true,
   })
 );
-// JSON body পড়ার জন্য (POST request-এর data)
-app.use(express.json());
+// Handle raw body for Stripe webhook, otherwise JSON
+app.use((req, res, next) => {
+  if (req.originalUrl.startsWith("/api/payments/webhook")) {
+    express.raw({ type: "application/json" })(req, res, next);
+  } else {
+    express.json()(req, res, next);
+  }
+});
 
 // Health check — server বেঁচে আছে কিনা দেখার route
 app.get("/", (req, res) => {
@@ -58,6 +65,7 @@ app.use("/api/applications", applicationsRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/payments", paymentsRoutes);
 
 
 
