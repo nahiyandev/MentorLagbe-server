@@ -10,6 +10,7 @@ const tuitionsRoutes = require("./routes/tuitions");
 const applicationsRoutes = require("./routes/applications");
 const adminRoutes = require("./routes/admin");
 const authRoutes = require("./routes/auth");
+const profileRoutes = require("./routes/profile");
 
 
 
@@ -56,6 +57,7 @@ app.use("/api/tuitions", tuitionsRoutes);
 app.use("/api/applications", applicationsRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/profile", profileRoutes);
 
 
 
