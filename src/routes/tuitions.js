@@ -1,5 +1,7 @@
 
 const express = require("express");
+const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const Tuition = require("../models/Tuition");
 const User = require("../models/User");
 const { verifyToken, verifyTutor } = require("../middlewares/auth");
@@ -42,16 +44,48 @@ router.get("/my-tuitions", verifyToken, verifyTutor, async (req, res) => {
   }
 });
 
-// GET /api/tuitions/:id — public details (শুধু approved + active)
+// GET /api/tuitions/:id — public details (approved + active, or owner/admin preview)
 router.get("/:id", async (req, res) => {
   try {
-    const tuition = await Tuition.findOne({
-      _id: req.params.id,
-      approvalStatus: "approved",
-      isActive: true,
-    });
+    const tuition = await Tuition.findById(req.params.id);
     if (!tuition) return res.status(404).json({ message: "Tuition not found" });
-    res.json(tuition);
+
+    // Public view: approved & active
+    if (tuition.approvalStatus === "approved" && tuition.isActive) {
+      return res.json(tuition);
+    }
+
+    // Owner or admin preview
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded.email === tuition.tutorEmail || decoded.role === "admin") {
+          return res.json(tuition);
+        }
+      } catch (_) {
+        const Session =
+          mongoose.models.Session ||
+          mongoose.model(
+            "Session",
+            new mongoose.Schema({}, { strict: false }),
+            "session"
+          );
+        const session = await Session.findOne({ token }).lean();
+        if (session && new Date(session.expiresAt) >= new Date()) {
+          const user = await User.findById(session.userId);
+          if (
+            user &&
+            (user.email === tuition.tutorEmail || user.role === "admin")
+          ) {
+            return res.json(tuition);
+          }
+        }
+      }
+    }
+
+    return res.status(404).json({ message: "Tuition not found" });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch tuition" });
   }
