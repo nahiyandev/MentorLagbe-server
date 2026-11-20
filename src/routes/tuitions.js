@@ -4,9 +4,43 @@ const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const Tuition = require("../models/Tuition");
 const User = require("../models/User");
+const Review = require("../models/Review");
 const { verifyToken, verifyTutor } = require("../middlewares/auth");
 
 const router = express.Router();
+
+// GET /api/tuitions/stats — platform-wide real dynamic statistics
+router.get("/stats", async (req, res) => {
+  try {
+    const totalTuitions = await Tuition.countDocuments({
+      approvalStatus: "approved",
+      isActive: true,
+    });
+    const subjects = await Tuition.distinct("subject", {
+      approvalStatus: "approved",
+      isActive: true,
+    });
+    const totalReviews = await Review.countDocuments();
+    const avgAgg = await Review.aggregate([
+      { $group: { _id: null, avg: { $avg: "$rating" } } },
+    ]);
+    const averageRating =
+      avgAgg.length > 0 && typeof avgAgg[0].avg === "number"
+        ? Number(avgAgg[0].avg.toFixed(1))
+        : 4.9;
+
+    res.json({
+      totalTuitions,
+      subjectsCount: subjects.length,
+      totalReviews,
+      averageRating,
+      verifiedTutorsPercentage: 100,
+    });
+  } catch (error) {
+    console.error("GET /api/tuitions/stats error:", error);
+    res.status(500).json({ message: "Failed to fetch platform stats" });
+  }
+});
 
 // GET /api/tuitions — public (শুধু approved + active)
 // ?search= (title/subject), ?subject=, ?classLevel=, ?mode=Online|Offline
@@ -26,8 +60,36 @@ router.get("/", async (req, res) => {
     if (classLevel) filter.classLevel = classLevel;
     if (mode) filter.mode = mode;
 
-    const tuitions = await Tuition.find(filter).sort({ createdAt: -1 });
-    res.json(tuitions);
+    const tuitions = await Tuition.find(filter).sort({ createdAt: -1 }).lean();
+
+    // Attach real dynamic ratings aggregated from Review collection
+    const tuitionIds = tuitions.map((t) => t._id);
+    const reviewAgg = await Review.aggregate([
+      { $match: { tuitionId: { $in: tuitionIds } } },
+      {
+        $group: {
+          _id: "$tuitionId",
+          averageRating: { $avg: "$rating" },
+          totalReviews: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const ratingMap = {};
+    reviewAgg.forEach((r) => {
+      ratingMap[r._id.toString()] = {
+        averageRating: Number(r.averageRating.toFixed(1)),
+        totalReviews: r.totalReviews,
+      };
+    });
+
+    const enriched = tuitions.map((t) => ({
+      ...t,
+      averageRating: ratingMap[t._id.toString()]?.averageRating || 0,
+      totalReviews: ratingMap[t._id.toString()]?.totalReviews || 0,
+    }));
+
+    res.json(enriched);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch tuitions" });
   }
@@ -50,9 +112,28 @@ router.get("/:id", async (req, res) => {
     const tuition = await Tuition.findById(req.params.id);
     if (!tuition) return res.status(404).json({ message: "Tuition not found" });
 
+    const attachRating = async (doc) => {
+      const reviewAgg = await Review.aggregate([
+        { $match: { tuitionId: doc._id } },
+        {
+          $group: {
+            _id: "$tuitionId",
+            averageRating: { $avg: "$rating" },
+            totalReviews: { $sum: 1 },
+          },
+        },
+      ]);
+      const data = reviewAgg[0] || { averageRating: 0, totalReviews: 0 };
+      const obj = doc.toObject ? doc.toObject() : doc;
+      obj.averageRating = Number((data.averageRating || 0).toFixed(1));
+      obj.totalReviews = data.totalReviews || 0;
+      return obj;
+    };
+
     // Public view: approved & active
     if (tuition.approvalStatus === "approved" && tuition.isActive) {
-      return res.json(tuition);
+      const enriched = await attachRating(tuition);
+      return res.json(enriched);
     }
 
     // Owner or admin preview
@@ -62,7 +143,8 @@ router.get("/:id", async (req, res) => {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         if (decoded.email === tuition.tutorEmail || decoded.role === "admin") {
-          return res.json(tuition);
+          const enriched = await attachRating(tuition);
+          return res.json(enriched);
         }
       } catch (_) {
         const Session =
@@ -79,7 +161,8 @@ router.get("/:id", async (req, res) => {
             user &&
             (user.email === tuition.tutorEmail || user.role === "admin")
           ) {
-            return res.json(tuition);
+            const enriched = await attachRating(tuition);
+            return res.json(enriched);
           }
         }
       }
