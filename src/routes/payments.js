@@ -39,7 +39,6 @@ router.post("/checkout", verifyToken, async (req, res) => {
       process.env.CLIENT_URL || "https://mentor-lagbe.vercel.app";
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
       mode: "payment",
       customer_email: user.email,
       line_items: [
