@@ -16,9 +16,12 @@ router.post("/jwt", async (req, res) => {
     }
 
     // BetterAuth-এর session collection-এ token খোঁজা
-    const session = await mongoose.connection.db
-      .collection("session")
-      .findOne({ token: sessionToken });
+const Session = mongoose.models.Session || mongoose.model(
+  "Session",
+  new mongoose.Schema({}, { strict: false }),
+  "session"
+);
+const session = await Session.findOne({ token: sessionToken }).lean();
     if (!session) {
       return res.status(401).json({ message: "Invalid session" });
     }
