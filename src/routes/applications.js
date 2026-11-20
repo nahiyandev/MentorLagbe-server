@@ -36,7 +36,7 @@ router.post("/", verifyToken, verifyStudent, async (req, res) => {
       subject: tuition.subject,
       monthlyFee: tuition.monthlyFee,
       tutorEmail: tuition.tutorEmail,
-      studentName: user?.name || req.body.studentName || "",
+      studentName: user?.name || req.body.studentName || "Student",
       studentEmail: req.user.email,
       studentPhone,
       preferredSchedule,
@@ -45,7 +45,8 @@ router.post("/", verifyToken, verifyStudent, async (req, res) => {
     });
     res.status(201).json(application);
   } catch (error) {
-    res.status(500).json({ message: "Failed to submit application" });
+    console.error("Failed to submit application:", error);
+    res.status(500).json({ message: error.message || "Failed to submit application" });
   }
 });
 

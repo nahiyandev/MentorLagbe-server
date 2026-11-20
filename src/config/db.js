@@ -4,8 +4,10 @@ const mongoose = require("mongoose");
 
 async function connectDB() {
   try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log("MongoDB connected");
+    await mongoose.connect(process.env.MONGODB_URI, {
+      dbName: "mentorlagbe",
+    });
+    console.log("MongoDB connected to mentorlagbe");
   } catch (error) {
     // DB connect না হলে server চালানো যাবে না — error দেখিয়ে বন্ধ
     console.error("MongoDB connection failed:", error.message);

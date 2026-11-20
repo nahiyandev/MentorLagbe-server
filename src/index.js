@@ -14,10 +14,28 @@ const authRoutes = require("./routes/auth");
 
 
 
-// CORS: শুধু আমাদের client (Next.js) যেন API-তে কথা বলতে পারে
+// CORS: Client (Next.js) localhost and production domains
+const allowedOrigins = [
+  "https://mentor-lagbe.vercel.app",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  process.env.CLIENT_URL,
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app") ||
+        origin.includes("localhost") ||
+        origin.includes("127.0.0.1")
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   })
 );

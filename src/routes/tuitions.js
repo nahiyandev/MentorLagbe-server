@@ -77,13 +77,15 @@ router.post("/", verifyToken, verifyTutor, async (req, res) => {
     const tuition = await Tuition.create({
       title, subject, classLevel, mode, location, monthlyFee,
       daysPerWeek, bannerImage, description,
-      tutorName, tutorEmail: req.user.email,
+      tutorName: tutorName || user?.name || "Tutor",
+      tutorEmail: req.user.email,
       approvalStatus: "pending", // admin approve না করা পর্যন্ত public-এ দেখাবে না
       isActive: true,
     });
     res.status(201).json(tuition);
   } catch (error) {
-    res.status(500).json({ message: "Failed to create tuition" });
+    console.error("Failed to create tuition:", error);
+    res.status(500).json({ message: error.message || "Failed to create tuition" });
   }
 });
 
