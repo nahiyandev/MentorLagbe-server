@@ -48,26 +48,53 @@ router.patch("/", verifyToken, async (req, res) => {
   }
 });
 
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function fullyDecode(str) {
+  let decoded = str || "";
+  try {
+    while (decoded.includes("%")) {
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
+    }
+  } catch (_) {}
+  return decoded.trim();
+}
+
 // GET /api/profile/tutor/:identifier — public tutor profile by email or user _id
 router.get("/tutor/:identifier", async (req, res) => {
   try {
-    const { identifier } = req.params;
+    const rawIdentifier = req.params.identifier;
+    const identifier = fullyDecode(rawIdentifier);
     let tutor = null;
 
     if (mongoose.Types.ObjectId.isValid(identifier)) {
       tutor = await User.findById(identifier).select("-__v");
     }
 
+    const escapedId = escapeRegex(identifier);
+
     if (!tutor) {
       tutor = await User.findOne({
-        email: { $regex: new RegExp(`^${identifier.trim()}$`, "i") },
+        $or: [
+          { email: identifier },
+          { email: identifier.toLowerCase() },
+          { email: { $regex: new RegExp(`^${escapedId}$`, "i") } },
+        ],
       }).select("-__v");
     }
 
     // If still not found in User, check if any tuition exists under this email
     if (!tutor) {
       const sampleTuition = await Tuition.findOne({
-        tutorEmail: { $regex: new RegExp(`^${identifier.trim()}$`, "i") },
+        $or: [
+          { tutorEmail: identifier },
+          { tutorEmail: identifier.toLowerCase() },
+          { tutorEmail: { $regex: new RegExp(`^${escapedId}$`, "i") } },
+        ],
       });
       if (sampleTuition) {
         tutor = {
@@ -86,17 +113,26 @@ router.get("/tutor/:identifier", async (req, res) => {
     }
 
     const tutorEmail = tutor.email;
+    const escapedEmail = escapeRegex(tutorEmail);
 
     // Fetch active & approved tuitions
     const tuitions = await Tuition.find({
-      tutorEmail: { $regex: new RegExp(`^${tutorEmail}$`, "i") },
+      $or: [
+        { tutorEmail },
+        { tutorEmail: tutorEmail.toLowerCase() },
+        { tutorEmail: { $regex: new RegExp(`^${escapedEmail}$`, "i") } },
+      ],
       approvalStatus: "approved",
       isActive: true,
     }).sort({ createdAt: -1 });
 
     // Fetch all reviews for this tutor
     const reviews = await Review.find({
-      tutorEmail: { $regex: new RegExp(`^${tutorEmail}$`, "i") },
+      $or: [
+        { tutorEmail },
+        { tutorEmail: tutorEmail.toLowerCase() },
+        { tutorEmail: { $regex: new RegExp(`^${escapedEmail}$`, "i") } },
+      ],
     }).sort({ createdAt: -1 });
 
     const totalReviews = reviews.length;
