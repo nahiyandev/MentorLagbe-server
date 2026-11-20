@@ -43,10 +43,10 @@ router.get("/stats", async (req, res) => {
 });
 
 // GET /api/tuitions — public (শুধু approved + active)
-// ?search= (title/subject), ?subject=, ?classLevel=, ?mode=Online|Offline
+// ?search= (title/subject/location), ?subject=, ?classLevel=, ?mode=, ?minFee=, ?maxFee=, ?district=
 router.get("/", async (req, res) => {
   try {
-    const { search, subject, classLevel, mode } = req.query;
+    const { search, subject, classLevel, mode, minFee, maxFee, district } = req.query;
 
     const filter = { approvalStatus: "approved", isActive: true };
 
@@ -54,11 +54,26 @@ router.get("/", async (req, res) => {
       filter.$or = [
         { title: { $regex: search, $options: "i" } },
         { subject: { $regex: search, $options: "i" } },
+        { location: { $regex: search, $options: "i" } },
       ];
     }
     if (subject) filter.subject = subject;
     if (classLevel) filter.classLevel = classLevel;
     if (mode) filter.mode = mode;
+
+    if (district && district.trim()) {
+      filter.location = { $regex: district.trim(), $options: "i" };
+    }
+
+    if (minFee || maxFee) {
+      filter.monthlyFee = {};
+      if (minFee && !isNaN(Number(minFee))) {
+        filter.monthlyFee.$gte = Number(minFee);
+      }
+      if (maxFee && !isNaN(Number(maxFee))) {
+        filter.monthlyFee.$lte = Number(maxFee);
+      }
+    }
 
     const tuitions = await Tuition.find(filter).sort({ createdAt: -1 }).lean();
 
