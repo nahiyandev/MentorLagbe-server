@@ -14,6 +14,7 @@ const profileRoutes = require("./routes/profile");
 const paymentsRoutes = require("./routes/payments");
 const reviewsRoutes = require("./routes/reviews");
 const notificationsRoutes = require("./routes/notifications");
+const messagesRoutes = require("./routes/messages");
 
 
 
@@ -70,6 +71,7 @@ app.use("/api/profile", profileRoutes);
 app.use("/api/payments", paymentsRoutes);
 app.use("/api/reviews", reviewsRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/messages", messagesRoutes);
 
 
 
