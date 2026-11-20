@@ -25,12 +25,13 @@ router.get("/", verifyToken, async (req, res) => {
 // Strictly ignores and disallows email, role, and plan updates
 router.patch("/", verifyToken, async (req, res) => {
   try {
-    const { name, phone, bio, image } = req.body;
+    const { name, phone, bio, image, availability } = req.body;
     const updateData = {};
     if (typeof name === "string" && name.trim()) updateData.name = name.trim();
     if (typeof phone === "string") updateData.phone = phone.trim();
     if (typeof bio === "string") updateData.bio = bio.trim();
     if (typeof image === "string") updateData.image = image.trim();
+    if (Array.isArray(availability)) updateData.availability = availability;
 
     const user = await User.findOneAndUpdate(
       { email: req.user.email },

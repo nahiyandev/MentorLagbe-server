@@ -127,6 +127,12 @@ router.get("/:id", async (req, res) => {
       const obj = doc.toObject ? doc.toObject() : doc;
       obj.averageRating = Number((data.averageRating || 0).toFixed(1));
       obj.totalReviews = data.totalReviews || 0;
+      try {
+        const tutorUser = await User.findOne({ email: doc.tutorEmail }).select("availability");
+        obj.tutorAvailability = tutorUser?.availability || [];
+      } catch (_) {
+        obj.tutorAvailability = [];
+      }
       return obj;
     };
 

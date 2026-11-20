@@ -2,6 +2,15 @@
 // তৈরি হয়: BetterAuth sign-up / profile update / Admin / Stripe webhook থেকে
 const mongoose = require("mongoose");
 
+const availabilitySlotSchema = new mongoose.Schema(
+  {
+    day: { type: String, required: true },
+    isAvailable: { type: Boolean, default: true },
+    slots: [{ type: String }],
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
@@ -18,6 +27,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["free", "pro"], // নতুন user মানেই 'free'
       default: "free",
+    },
+    availability: {
+      type: [availabilitySlotSchema],
+      default: [
+        { day: "Saturday", isAvailable: true, slots: ["10:00 AM - 12:00 PM", "6:00 PM - 8:00 PM"] },
+        { day: "Sunday", isAvailable: true, slots: ["6:00 PM - 8:00 PM"] },
+        { day: "Monday", isAvailable: true, slots: ["6:00 PM - 8:00 PM"] },
+        { day: "Tuesday", isAvailable: true, slots: ["6:00 PM - 8:00 PM"] },
+        { day: "Wednesday", isAvailable: true, slots: ["6:00 PM - 8:00 PM"] },
+        { day: "Thursday", isAvailable: false, slots: [] },
+        { day: "Friday", isAvailable: false, slots: [] },
+      ],
     },
   },
   { timestamps: { createdAt: true, updatedAt: false } } // createdAt auto বসবে
