@@ -4,6 +4,7 @@ const express = require("express");
 const Application = require("../models/Application");
 const Tuition = require("../models/Tuition");
 const User = require("../models/User");
+const Notification = require("../models/Notification");
 const { verifyToken, verifyStudent, verifyTutor } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -43,6 +44,21 @@ router.post("/", verifyToken, verifyStudent, async (req, res) => {
       studentNote,
       status: "pending",
     });
+
+    // Notify tutor about incoming application
+    try {
+      await Notification.create({
+        recipientEmail: tuition.tutorEmail,
+        recipientRole: "tutor",
+        title: "New Student Application",
+        message: `${application.studentName} applied for "${tuition.title}" (${tuition.subject}).`,
+        type: "application_received",
+        link: "/dashboard/tutor/applicants",
+      });
+    } catch (notifErr) {
+      console.warn("Could not send application notification to tutor:", notifErr);
+    }
+
     res.status(201).json(application);
   } catch (error) {
     console.error("Failed to submit application:", error);
@@ -82,6 +98,24 @@ router.patch("/:id/status", verifyToken, verifyTutor, async (req, res) => {
     if (!application) return res.status(404).json({ message: "Application not found" });
     application.status = status;
     await application.save();
+
+    // Notify student about application acceptance or rejection
+    try {
+      const isAccepted = status === "accepted";
+      await Notification.create({
+        recipientEmail: application.studentEmail,
+        recipientRole: "student",
+        title: isAccepted ? "Application Accepted! 🎉" : "Application Update",
+        message: isAccepted
+          ? `Congratulations! Your application for "${application.tuitionTitle}" was accepted by tutor ${application.tutorEmail}. Check details & download your admission slip.`
+          : `Your application for "${application.tuitionTitle}" was not accepted. Browse other available batches on the platform.`,
+        type: isAccepted ? "application_accepted" : "application_rejected",
+        link: "/dashboard/student/my-applications",
+      });
+    } catch (notifErr) {
+      console.warn("Could not send status notification to student:", notifErr);
+    }
+
     res.json(application);
   } catch (error) {
     res.status(500).json({ message: "Failed to update application" });
