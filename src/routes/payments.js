@@ -46,8 +46,8 @@ router.post("/checkout", verifyToken, async (req, res) => {
           price_data: {
             currency: "usd",
             product_data: {
-              name: effectivePlanName,
-              description: `MentorLagbe Pro Membership Subscription for ${effectiveRole}s`,
+              name: `${effectivePlanName} — One-Time Payment`,
+              description: `MentorLagbe ${effectivePlanName} One-Time Lifetime Pro Access for ${effectiveRole}s (No recurring subscription)`,
             },
             unit_amount: Math.round(parsedAmount * 100),
           },
@@ -62,6 +62,7 @@ router.post("/checkout", verifyToken, async (req, res) => {
         userName: user.name,
         userRole: effectiveRole,
         planName: effectivePlanName,
+        paymentType: "one_time",
         amount: String(parsedAmount),
       },
     });
