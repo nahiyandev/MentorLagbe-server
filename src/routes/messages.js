@@ -37,17 +37,19 @@ router.post("/", verifyToken, async (req, res) => {
     const senderRole = req.user.role || senderUser?.role || "student";
     const recipientRole = recipientUser?.role || (senderRole === "student" ? "tutor" : "student");
 
-    const conversationId = getConversationId(req.user.email, recipientEmail, tuitionId);
+    const normSenderEmail = req.user.email.toLowerCase().trim();
+    const normRecipientEmail = recipientEmail.toLowerCase().trim();
+    const conversationId = getConversationId(normSenderEmail, normRecipientEmail, tuitionId);
 
     const message = await Message.create({
       conversationId,
       tuitionId: tuitionId || null,
       tuitionTitle,
-      senderEmail: req.user.email,
-      senderName: senderUser?.name || req.user.email.split("@")[0],
+      senderEmail: normSenderEmail,
+      senderName: senderUser?.name || normSenderEmail.split("@")[0],
       senderRole,
-      recipientEmail,
-      recipientName: recipientUser?.name || recipientEmail.split("@")[0],
+      recipientEmail: normRecipientEmail,
+      recipientName: recipientUser?.name || normRecipientEmail.split("@")[0],
       recipientRole,
       text: text.trim(),
       isRead: false,
@@ -56,7 +58,7 @@ router.post("/", verifyToken, async (req, res) => {
     // Notify recipient in-app
     try {
       await Notification.create({
-        recipientEmail,
+        recipientEmail: normRecipientEmail,
         recipientRole,
         title: `Message from ${message.senderName}`,
         message: `${message.senderName}: "${text.trim().slice(0, 60)}${text.trim().length > 60 ? "..." : ""}"`,
@@ -92,18 +94,19 @@ router.get("/unread-count", verifyToken, async (req, res) => {
 // GET /api/messages/conversations — list of active threads for user
 router.get("/conversations", verifyToken, async (req, res) => {
   try {
-    const myEmail = req.user.email;
+    const myEmail = (req.user.email || "").toLowerCase().trim();
+    const emailRegex = { $regex: new RegExp(`^${myEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") };
 
     // Find all distinct conversation IDs involving user
     const messages = await Message.find({
-      $or: [{ senderEmail: myEmail }, { recipientEmail: myEmail }],
+      $or: [{ senderEmail: emailRegex }, { recipientEmail: emailRegex }],
     }).sort({ createdAt: -1 });
 
     const convoMap = new Map();
 
     for (const msg of messages) {
       if (!convoMap.has(msg.conversationId)) {
-        const isMeSender = msg.senderEmail.toLowerCase() === myEmail.toLowerCase();
+        const isMeSender = (msg.senderEmail || "").toLowerCase() === myEmail;
         const otherPartyEmail = isMeSender ? msg.recipientEmail : msg.senderEmail;
         const otherPartyName = isMeSender ? msg.recipientName : msg.senderName;
         const otherPartyRole = isMeSender ? msg.recipientRole : msg.senderRole;
@@ -129,7 +132,7 @@ router.get("/conversations", verifyToken, async (req, res) => {
       }
 
       // Count unread if I am recipient
-      if (msg.recipientEmail.toLowerCase() === myEmail.toLowerCase() && !msg.isRead) {
+      if ((msg.recipientEmail || "").toLowerCase() === myEmail && !msg.isRead) {
         const item = convoMap.get(msg.conversationId);
         if (item) item.unreadCount += 1;
       }
@@ -146,7 +149,8 @@ router.get("/conversations", verifyToken, async (req, res) => {
 router.get("/thread", verifyToken, async (req, res) => {
   try {
     const { otherUser, tuitionId, conversationId } = req.query;
-    const myEmail = req.user.email;
+    const myEmail = (req.user.email || "").toLowerCase().trim();
+    const emailRegex = { $regex: new RegExp(`^${myEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") };
 
     let targetConvoId = conversationId;
     if (!targetConvoId && otherUser) {
@@ -161,7 +165,7 @@ router.get("/thread", verifyToken, async (req, res) => {
     await Message.updateMany(
       {
         conversationId: targetConvoId,
-        recipientEmail: myEmail,
+        recipientEmail: emailRegex,
         isRead: false,
       },
       { $set: { isRead: true } }
