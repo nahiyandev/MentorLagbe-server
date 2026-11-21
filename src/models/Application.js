@@ -17,6 +17,7 @@ const applicationSchema = new mongoose.Schema(
     studentEmail: { type: String, required: true },
     studentPhone: { type: String, required: true },
     preferredSchedule: { type: String, required: true },
+    selectedSlots: { type: [String], default: [] },
     studentNote: { type: String, default: "" },
     status: {
       type: String,

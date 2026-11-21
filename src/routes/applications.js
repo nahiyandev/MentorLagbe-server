@@ -41,6 +41,7 @@ router.post("/", verifyToken, verifyStudent, async (req, res) => {
       studentEmail: req.user.email,
       studentPhone,
       preferredSchedule,
+      selectedSlots: Array.isArray(req.body.selectedSlots) ? req.body.selectedSlots : [],
       studentNote,
       status: "pending",
     });
@@ -127,8 +128,8 @@ router.patch("/:id/status", verifyToken, verifyTutor, async (req, res) => {
 // Body: { studentPhone, preferredSchedule, studentNote }
 router.patch("/:id", verifyToken, verifyStudent, async (req, res) => {
   try {
-    const { studentPhone, preferredSchedule, studentNote } = req.body;
-    if (!studentPhone && !preferredSchedule && studentNote === undefined) {
+    const { studentPhone, preferredSchedule, selectedSlots, studentNote } = req.body;
+    if (!studentPhone && !preferredSchedule && !selectedSlots && studentNote === undefined) {
       return res.status(400).json({ message: "No fields provided to update" });
     }
 
@@ -148,6 +149,7 @@ router.patch("/:id", verifyToken, verifyStudent, async (req, res) => {
 
     if (studentPhone) application.studentPhone = studentPhone.trim();
     if (preferredSchedule) application.preferredSchedule = preferredSchedule.trim();
+    if (Array.isArray(selectedSlots)) application.selectedSlots = selectedSlots;
     if (studentNote !== undefined) application.studentNote = studentNote.trim();
 
     await application.save();
