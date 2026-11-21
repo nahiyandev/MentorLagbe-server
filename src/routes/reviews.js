@@ -8,6 +8,22 @@ const { verifyToken, verifyStudent } = require("../middlewares/auth");
 
 const router = express.Router();
 
+function areSimilarFeedback(textA, textB) {
+  const cleanA = (textA || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
+  const cleanB = (textB || "").toLowerCase().replace(/[^\w\s]/g, "").trim();
+  if (!cleanA || !cleanB) return false;
+  if (cleanA === cleanB) return true;
+  if (cleanA.slice(0, 25) === cleanB.slice(0, 25)) return true;
+  const wordsA = new Set(cleanA.split(/\s+/));
+  const wordsB = new Set(cleanB.split(/\s+/));
+  let intersection = 0;
+  for (const w of wordsA) {
+    if (wordsB.has(w)) intersection++;
+  }
+  const overlap = intersection / Math.min(wordsA.size, wordsB.size);
+  return overlap >= 0.6;
+}
+
 // POST /api/reviews — student only (must have an accepted application)
 router.post("/", verifyToken, verifyStudent, async (req, res) => {
   try {
@@ -74,13 +90,47 @@ router.post("/", verifyToken, verifyStudent, async (req, res) => {
 });
 
 // GET /api/reviews/featured — public real testimonials/reviews across the platform
+// Guarantees distinct students and distinct non-repeating feedback across the 6 featured cards
 router.get("/featured", async (req, res) => {
   try {
-    const reviews = await Review.find()
+    const candidateReviews = await Review.find({ rating: { $gte: 4 } })
       .sort({ rating: -1, createdAt: -1 })
-      .limit(6)
+      .limit(60)
       .lean();
-    res.json(reviews);
+
+    const featured = [];
+    const seenStudents = new Set();
+    const seenFeedbacks = [];
+
+    // Pass 1: Strict distinct student AND distinct non-repeating feedback
+    for (const r of candidateReviews) {
+      const studentKey = (r.studentEmail || r.studentName || "").toLowerCase().trim();
+      if (!studentKey || seenStudents.has(studentKey)) continue;
+
+      const isDuplicateFeedback = seenFeedbacks.some((fb) =>
+        areSimilarFeedback(fb, r.feedback)
+      );
+      if (isDuplicateFeedback) continue;
+
+      seenStudents.add(studentKey);
+      seenFeedbacks.push(r.feedback);
+      featured.push(r);
+      if (featured.length >= 6) break;
+    }
+
+    // Pass 2: If fewer than 6, fill with unique students
+    if (featured.length < 6) {
+      for (const r of candidateReviews) {
+        const studentKey = (r.studentEmail || r.studentName || "").toLowerCase().trim();
+        if (studentKey && !seenStudents.has(studentKey)) {
+          seenStudents.add(studentKey);
+          featured.push(r);
+          if (featured.length >= 6) break;
+        }
+      }
+    }
+
+    res.json(featured);
   } catch (error) {
     console.error("GET /api/reviews/featured error:", error);
     res.status(500).json({ message: "Failed to fetch featured reviews", reviews: [] });
