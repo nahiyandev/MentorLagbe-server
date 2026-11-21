@@ -133,6 +133,74 @@ router.get("/my-tuitions", verifyToken, verifyTutor, async (req, res) => {
   }
 });
 
+// GET /api/tuitions/tutor/analytics — tutor listing views & application analytics
+router.get("/tutor/analytics", verifyToken, verifyTutor, async (req, res) => {
+  try {
+    const email = req.user.email;
+    const myTuitions = await Tuition.find({
+      $or: [
+        { tutorEmail: email },
+        { tutorEmail: email.toLowerCase() },
+      ],
+    }).sort({ createdAt: -1 });
+
+    let totalViews = 0;
+    let totalApplicants = 0;
+    let totalAccepted = 0;
+
+    const breakdown = await Promise.all(
+      myTuitions.map(async (t) => {
+        const views = t.viewCount || 0;
+        const applicantsCount = await Application.countDocuments({ tuitionId: t._id });
+        const acceptedCount = await Application.countDocuments({
+          tuitionId: t._id,
+          status: "accepted",
+        });
+
+        totalViews += views;
+        totalApplicants += applicantsCount;
+        totalAccepted += acceptedCount;
+
+        const conversionRate =
+          views > 0 ? Number(((applicantsCount / views) * 100).toFixed(1)) : 0;
+
+        return {
+          tuitionId: t._id,
+          title: t.title,
+          subject: t.subject,
+          monthlyFee: t.monthlyFee,
+          mode: t.mode,
+          approvalStatus: t.approvalStatus,
+          isActive: t.isActive,
+          views,
+          applicantsCount,
+          acceptedCount,
+          conversionRate,
+        };
+      })
+    );
+
+    const overallConversionRate =
+      totalViews > 0
+        ? Number(((totalApplicants / totalViews) * 100).toFixed(1))
+        : 0;
+
+    return res.json({
+      totals: {
+        totalListings: myTuitions.length,
+        totalViews,
+        totalApplicants,
+        totalAccepted,
+        overallConversionRate,
+      },
+      breakdown,
+    });
+  } catch (error) {
+    console.error("Error in tutor analytics:", error);
+    return res.status(500).json({ message: "Failed to fetch tutor analytics" });
+  }
+});
+
 // GET /api/tuitions/:id — public details (approved + active, or owner/admin preview)
 router.get("/:id", async (req, res) => {
   try {
@@ -165,6 +233,7 @@ router.get("/:id", async (req, res) => {
 
     // Public view: approved & active
     if (tuition.approvalStatus === "approved" && tuition.isActive) {
+      Tuition.findByIdAndUpdate(tuition._id, { $inc: { viewCount: 1 } }).catch(() => {});
       const enriched = await attachRating(tuition);
       return res.json(enriched);
     }
