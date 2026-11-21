@@ -184,6 +184,49 @@ router.patch("/:id/status", verifyToken, verifyTutor, async (req, res) => {
   }
 });
 
+// PATCH /api/applications/:id/meet-link — tutor sets or updates Google Meet link for accepted applicant
+router.patch("/:id/meet-link", verifyToken, verifyTutor, async (req, res) => {
+  try {
+    const { meetLink } = req.body;
+    const application = await Application.findOne({
+      _id: req.params.id,
+      tutorEmail: req.user.email,
+    });
+    if (!application) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+    if (application.status !== "accepted") {
+      return res.status(400).json({
+        message: "Google Meet link can only be set for accepted applications",
+      });
+    }
+
+    application.meetLink = (meetLink || "").trim();
+    await application.save();
+
+    // Notify student about the Meet link
+    if (application.meetLink) {
+      try {
+        await Notification.create({
+          recipientEmail: application.studentEmail,
+          recipientRole: "student",
+          title: "Class Meet Link Available! 🎥",
+          message: `Your tutor provided the Google Meet link for "${application.tuitionTitle}". Click to join class!`,
+          type: "system",
+          link: "/dashboard/student/my-applications",
+        });
+      } catch (notifErr) {
+        console.warn("Could not send meet link notification to student:", notifErr);
+      }
+    }
+
+    res.json(application);
+  } catch (error) {
+    console.error("Failed to update meet link:", error);
+    res.status(500).json({ message: "Failed to update meet link" });
+  }
+});
+
 // PATCH /api/applications/:id — student only, pending applications can be edited
 // Body: { studentPhone, preferredSchedule, studentNote }
 router.patch("/:id", verifyToken, verifyStudent, async (req, res) => {
