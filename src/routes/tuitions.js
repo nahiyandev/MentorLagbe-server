@@ -243,10 +243,12 @@ router.get("/:id", async (req, res) => {
       obj.averageRating = Number((data.averageRating || 0).toFixed(1));
       obj.totalReviews = data.totalReviews || 0;
       try {
-        const tutorUser = await User.findOne({ email: doc.tutorEmail }).select("availability");
+        const tutorUser = await User.findOne({ email: doc.tutorEmail }).select("availability phone");
         obj.tutorAvailability = tutorUser?.availability || [];
+        obj.tutorPhone = tutorUser?.phone || "";
       } catch (_) {
         obj.tutorAvailability = [];
+        obj.tutorPhone = "";
       }
       return obj;
     };
