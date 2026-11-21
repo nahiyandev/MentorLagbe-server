@@ -18,16 +18,45 @@ router.get("/stats", async (req, res) => {
     const totalTutors = await User.countDocuments({ role: "tutor" });
     const pendingTuitions = await Tuition.countDocuments({ approvalStatus: "pending" });
     const approvedTuitions = await Tuition.countDocuments({ approvalStatus: "approved" });
-    const revenue = await Payment.aggregate([
+
+    const revenueByCurrency = await Payment.aggregate([
       { $match: { paymentStatus: "paid" } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
+      {
+        $group: {
+          _id: { $toLower: { $ifNull: ["$currency", "usd"] } },
+          total: { $sum: "$amount" },
+        },
+      },
     ]);
+
+    let stripeRevenueUsd = 0;
+    let localRevenueBdt = 0;
+
+    for (const item of revenueByCurrency) {
+      if (item._id === "bdt") {
+        localRevenueBdt = item.total;
+      } else {
+        stripeRevenueUsd += item.total;
+      }
+    }
+
+    let pendingReports = 0;
+    try {
+      const Report = require("../models/Report");
+      pendingReports = await Report.countDocuments({ status: "pending" });
+    } catch {
+      pendingReports = 0;
+    }
+
     res.json({
       totalUsers,
       totalTutors,
       pendingTuitions,
       approvedTuitions,
-      totalRevenue: revenue[0]?.total || 0,
+      totalRevenue: stripeRevenueUsd,
+      stripeRevenueUsd,
+      localRevenueBdt,
+      pendingReports,
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch stats" });
