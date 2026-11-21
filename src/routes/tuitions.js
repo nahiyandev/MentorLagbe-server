@@ -147,19 +147,26 @@ router.get("/tutor/analytics", verifyToken, verifyTutor, async (req, res) => {
     let totalViews = 0;
     let totalApplicants = 0;
     let totalAccepted = 0;
+    let totalEarnings = 0;
 
     const breakdown = await Promise.all(
       myTuitions.map(async (t) => {
         const views = t.viewCount || 0;
         const applicantsCount = await Application.countDocuments({ tuitionId: t._id });
-        const acceptedCount = await Application.countDocuments({
+        const acceptedApps = await Application.find({
           tuitionId: t._id,
           status: "accepted",
         });
+        const acceptedCount = acceptedApps.length;
+        const tuitionEarnings = acceptedApps.reduce(
+          (sum, a) => sum + (a.monthlyFee || t.monthlyFee || 0),
+          0
+        );
 
         totalViews += views;
         totalApplicants += applicantsCount;
         totalAccepted += acceptedCount;
+        totalEarnings += tuitionEarnings;
 
         // Acceptance rate: accepted / applicants (capped at 100%)
         const acceptanceRate =
@@ -186,6 +193,7 @@ router.get("/tutor/analytics", verifyToken, verifyTutor, async (req, res) => {
           views,
           applicantsCount,
           acceptedCount,
+          tuitionEarnings,
           acceptanceRate,
           applyRate,
           conversionRate,
@@ -209,6 +217,7 @@ router.get("/tutor/analytics", verifyToken, verifyTutor, async (req, res) => {
         totalViews,
         totalApplicants,
         totalAccepted,
+        totalEarnings,
         overallAcceptanceRate,
         overallConversionRate,
         acceptanceRate: overallAcceptanceRate,
