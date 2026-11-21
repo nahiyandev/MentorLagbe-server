@@ -161,8 +161,19 @@ router.get("/tutor/analytics", verifyToken, verifyTutor, async (req, res) => {
         totalApplicants += applicantsCount;
         totalAccepted += acceptedCount;
 
-        const conversionRate =
-          views > 0 ? Number(((applicantsCount / views) * 100).toFixed(1)) : 0;
+        // Acceptance rate: accepted / applicants (capped at 100%)
+        const acceptanceRate =
+          applicantsCount > 0
+            ? Math.min(100, Number(((acceptedCount / applicantsCount) * 100).toFixed(1)))
+            : 0;
+
+        // Apply rate: applicants / views (capped at 100%, null if views === 0)
+        const applyRate =
+          views > 0
+            ? Math.min(100, Number(((applicantsCount / views) * 100).toFixed(1)))
+            : null;
+
+        const conversionRate = acceptanceRate;
 
         return {
           tuitionId: t._id,
@@ -175,15 +186,22 @@ router.get("/tutor/analytics", verifyToken, verifyTutor, async (req, res) => {
           views,
           applicantsCount,
           acceptedCount,
+          acceptanceRate,
+          applyRate,
           conversionRate,
         };
       })
     );
 
+    const overallAcceptanceRate =
+      totalApplicants > 0
+        ? Math.min(100, Number(((totalAccepted / totalApplicants) * 100).toFixed(1)))
+        : 0;
+
     const overallConversionRate =
       totalViews > 0
-        ? Number(((totalApplicants / totalViews) * 100).toFixed(1))
-        : 0;
+        ? Math.min(100, Number(((totalApplicants / totalViews) * 100).toFixed(1)))
+        : null;
 
     return res.json({
       totals: {
@@ -191,7 +209,9 @@ router.get("/tutor/analytics", verifyToken, verifyTutor, async (req, res) => {
         totalViews,
         totalApplicants,
         totalAccepted,
+        overallAcceptanceRate,
         overallConversionRate,
+        acceptanceRate: overallAcceptanceRate,
       },
       breakdown,
     });
