@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const Tuition = require("../models/Tuition");
 const User = require("../models/User");
 const Review = require("../models/Review");
+const Application = require("../models/Application");
 const { verifyToken, verifyTutor } = require("../middlewares/auth");
 
 const router = express.Router();

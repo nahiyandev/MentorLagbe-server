@@ -74,6 +74,21 @@ router.post("/", verifyToken, async (req, res) => {
   }
 });
 
+// GET /api/messages/unread-count — total unread messages for logged in user
+router.get("/unread-count", verifyToken, async (req, res) => {
+  try {
+    const myEmail = (req.user.email || "").toLowerCase().trim();
+    const count = await Message.countDocuments({
+      recipientEmail: { $regex: new RegExp(`^${myEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") },
+      isRead: false,
+    });
+    res.json({ unreadCount: count });
+  } catch (error) {
+    console.error("GET /api/messages/unread-count error:", error);
+    res.status(500).json({ message: "Failed to fetch unread message count", unreadCount: 0 });
+  }
+});
+
 // GET /api/messages/conversations — list of active threads for user
 router.get("/conversations", verifyToken, async (req, res) => {
   try {

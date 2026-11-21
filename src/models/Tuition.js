@@ -25,6 +25,7 @@ const tuitionSchema = new mongoose.Schema(
       default: "pending", // নতুন post মানেই pending — Admin approve না করলে public-এ আসবে না
     },
     isActive: { type: Boolean, default: true }, // Tutor নিজে Active/Closed করতে পারে
+    viewCount: { type: Number, default: 0 },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );
