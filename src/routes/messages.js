@@ -13,12 +13,46 @@ function getConversationId(emailA, emailB, tuitionId) {
   return tuitionId ? `${pair}__${tuitionId}` : pair;
 }
 
+// GET /api/messages/admin-contact — get admin contact for student/tutor support messaging
+router.get("/admin-contact", verifyToken, async (req, res) => {
+  try {
+    let admin = await User.findOne({ role: "admin" }).select("name email role");
+    if (!admin) {
+      admin = {
+        name: "Platform Admin",
+        email: "nahiyanadmin@gmail.com",
+        role: "admin",
+      };
+    }
+    res.json({
+      name: admin.name || "Platform Admin",
+      email: admin.email,
+      role: "admin",
+    });
+  } catch (error) {
+    console.error("GET /api/messages/admin-contact error:", error);
+    res.status(500).json({ message: "Failed to fetch admin contact" });
+  }
+});
+
 // POST /api/messages — send direct message
 router.post("/", verifyToken, async (req, res) => {
   try {
-    const { recipientEmail, tuitionId, text } = req.body;
-    if (!recipientEmail || !text || !text.trim()) {
+    let { recipientEmail, tuitionId, text, toAdmin, tuitionTitle: customTitle } = req.body;
+    if ((!recipientEmail && !toAdmin) || !text || !text.trim()) {
       return res.status(400).json({ message: "Recipient email and message text are required" });
+    }
+
+    let recipientUser = null;
+    if (toAdmin || recipientEmail === "admin") {
+      recipientUser = await User.findOne({ role: "admin" });
+      if (recipientUser) {
+        recipientEmail = recipientUser.email;
+      } else {
+        recipientEmail = "nahiyanadmin@gmail.com";
+      }
+    } else {
+      recipientUser = await User.findOne({ email: recipientEmail });
     }
 
     if (recipientEmail.toLowerCase() === req.user.email.toLowerCase()) {
@@ -26,16 +60,22 @@ router.post("/", verifyToken, async (req, res) => {
     }
 
     const senderUser = await User.findOne({ email: req.user.email });
-    const recipientUser = await User.findOne({ email: recipientEmail });
 
-    let tuitionTitle = "";
+    let tuitionTitle = customTitle || "";
     if (tuitionId) {
       const tuition = await Tuition.findById(tuitionId);
       if (tuition) tuitionTitle = tuition.title;
     }
 
     const senderRole = req.user.role || senderUser?.role || "student";
-    const recipientRole = recipientUser?.role || (senderRole === "student" ? "tutor" : "student");
+    const recipientRole =
+      recipientUser?.role ||
+      req.body.recipientRole ||
+      (senderRole === "student" ? "tutor" : "student");
+
+    if (!tuitionTitle && (recipientRole === "admin" || senderRole === "admin")) {
+      tuitionTitle = "Platform Support & Inquiries";
+    }
 
     const normSenderEmail = req.user.email.toLowerCase().trim();
     const normRecipientEmail = recipientEmail.toLowerCase().trim();
@@ -49,7 +89,7 @@ router.post("/", verifyToken, async (req, res) => {
       senderName: senderUser?.name || normSenderEmail.split("@")[0],
       senderRole,
       recipientEmail: normRecipientEmail,
-      recipientName: recipientUser?.name || normRecipientEmail.split("@")[0],
+      recipientName: recipientUser?.name || (recipientRole === "admin" ? "Platform Admin" : normRecipientEmail.split("@")[0]),
       recipientRole,
       text: text.trim(),
       isRead: false,
@@ -57,10 +97,17 @@ router.post("/", verifyToken, async (req, res) => {
 
     // Notify recipient in-app
     try {
+      const notifTitle =
+        senderRole === "admin"
+          ? "Message from Platform Admin"
+          : recipientRole === "admin"
+          ? `Support Message from ${message.senderName} (${senderRole})`
+          : `Message from ${message.senderName}`;
+
       await Notification.create({
         recipientEmail: normRecipientEmail,
         recipientRole,
-        title: `Message from ${message.senderName}`,
+        title: notifTitle,
         message: `${message.senderName}: "${text.trim().slice(0, 60)}${text.trim().length > 60 ? "..." : ""}"`,
         type: "system",
         link: "/dashboard/messages",
