@@ -104,6 +104,52 @@ router.patch("/tuitions/:id/reject", async (req, res) => {
   }
 });
 
+// PATCH /api/admin/tuitions/bulk-status — একসাথে একাধিক টিউশন approve / reject
+router.patch("/tuitions/bulk-status", async (req, res) => {
+  try {
+    const { tuitionIds, status } = req.body;
+    if (!Array.isArray(tuitionIds) || tuitionIds.length === 0) {
+      return res.status(400).json({ message: "An array of tuitionIds is required" });
+    }
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Status must be 'approved' or 'rejected'" });
+    }
+
+    const result = await Tuition.updateMany(
+      { _id: { $in: tuitionIds } },
+      { $set: { approvalStatus: status } }
+    );
+
+    // Send notifications to tutors
+    try {
+      const Notification = require("../models/Notification");
+      const affectedTuitions = await Tuition.find({ _id: { $in: tuitionIds } });
+      const notifications = affectedTuitions.map((t) => ({
+        recipientEmail: t.tutorEmail,
+        recipientRole: "tutor",
+        title: `Tuition Listing ${status === "approved" ? "Approved" : "Rejected"}`,
+        message: `Your listing "${t.title}" was ${status} by Admin.`,
+        type: status === "approved" ? "tuition_approved" : "system",
+        link: `/tuitions/${t._id}`,
+      }));
+      if (notifications.length > 0) {
+        await Notification.insertMany(notifications, { ordered: false });
+      }
+    } catch (notifErr) {
+      console.warn("Bulk notification warning:", notifErr);
+    }
+
+    res.json({
+      success: true,
+      modifiedCount: result.modifiedCount,
+      message: `Successfully ${status} ${result.modifiedCount} tuition listings.`,
+    });
+  } catch (error) {
+    console.error("Bulk status error:", error);
+    res.status(500).json({ message: "Failed to update bulk tuition status" });
+  }
+});
+
 // GET /api/admin/transactions — সব payment records
 router.get("/transactions", async (req, res) => {
   try {
