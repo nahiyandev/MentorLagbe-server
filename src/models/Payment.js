@@ -1,5 +1,4 @@
-// payments collection — doc-এর field list হুবহু
-// বানায়: Stripe webhook (checkout success-এর পর) — frontend থেকে নয়
+// payments collection
 const mongoose = require("mongoose");
 
 const paymentSchema = new mongoose.Schema({
@@ -7,17 +6,23 @@ const paymentSchema = new mongoose.Schema({
   userName: { type: String, required: true },
   userRole: {
     type: String,
-    enum: ["student", "tutor"],
+    enum: ["student", "tutor", "admin"],
     required: true,
   },
   planName: { type: String, required: true }, // 'Tutor Pro' / 'Student Pro'
   amount: { type: Number, required: true },
   currency: { type: String, default: "usd" },
+  paymentMethod: {
+    type: String,
+    enum: ["stripe", "bkash", "nagad"],
+    default: "stripe",
+  },
+  senderNumber: { type: String, default: "" },
   transactionId: { type: String, required: true, unique: true },
-  stripeSessionId: { type: String, required: true },
+  stripeSessionId: { type: String, default: "" },
   paymentStatus: {
     type: String,
-    enum: ["paid"],
+    enum: ["paid", "pending", "failed"],
     default: "paid",
   },
   paidAt: { type: Date, default: Date.now },

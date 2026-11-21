@@ -152,6 +152,95 @@ router.get("/verify-session", async (req, res) => {
   }
 });
 
+// POST /api/payments/local-pay — bKash / Nagad mobile banking payment & instant verification
+router.post("/local-pay", verifyToken, async (req, res) => {
+  try {
+    const { paymentMethod, transactionId, senderNumber, planName, amount, userRole } = req.body;
+
+    if (!paymentMethod || !["bkash", "nagad"].includes(paymentMethod.toLowerCase())) {
+      return res.status(400).json({ message: "Invalid payment method. Must be bkash or nagad." });
+    }
+
+    if (!transactionId || typeof transactionId !== "string" || transactionId.trim().length < 6) {
+      return res.status(400).json({ message: "A valid transaction ID (at least 6 characters) is required." });
+    }
+
+    if (!senderNumber || !/^01[3-9]\d{8}$/.test(senderNumber.trim())) {
+      return res.status(400).json({ message: "A valid 11-digit Bangladeshi mobile number (e.g. 017XXXXXXXX) is required." });
+    }
+
+    const cleanTrxId = transactionId.trim().toUpperCase();
+    const cleanSender = senderNumber.trim();
+
+    // Prevent duplicate transaction IDs
+    const existing = await Payment.findOne({ transactionId: cleanTrxId });
+    if (existing) {
+      return res.status(409).json({ message: "This Transaction ID has already been submitted or used." });
+    }
+
+    const user = await User.findOne({ email: req.user.email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const effectiveRole = ["tutor", "student"].includes(user.role)
+      ? user.role
+      : userRole === "tutor"
+      ? "tutor"
+      : "student";
+
+    const effectivePlanName =
+      planName || (effectiveRole === "tutor" ? "Tutor Pro" : "Student Pro");
+    const parsedAmount =
+      Number(amount) || (effectiveRole === "tutor" ? 1500 : 1000);
+
+    const payment = await Payment.create({
+      userEmail: user.email,
+      userName: user.name || "Subscriber",
+      userRole: effectiveRole,
+      planName: effectivePlanName,
+      amount: parsedAmount,
+      currency: "bdt",
+      paymentMethod: paymentMethod.toLowerCase(),
+      senderNumber: cleanSender,
+      transactionId: cleanTrxId,
+      stripeSessionId: `${paymentMethod.toLowerCase()}_${cleanTrxId}`,
+      paymentStatus: "paid",
+      paidAt: new Date(),
+    });
+
+    // Upgrade user plan to pro
+    await User.findOneAndUpdate(
+      { email: user.email },
+      { $set: { plan: "pro" } }
+    );
+
+    // Create Notification
+    try {
+      const Notification = require("../models/Notification");
+      await Notification.create({
+        recipientEmail: user.email,
+        recipientRole: effectiveRole,
+        title: "Pro Membership Activated",
+        message: `Your payment of ৳${parsedAmount} via ${paymentMethod.toUpperCase()} (TrxID: ${cleanTrxId}) was verified. Welcome to Pro!`,
+        type: "system",
+        link: "/dashboard",
+      });
+    } catch (notifErr) {
+      console.warn("Could not create payment notification:", notifErr);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: `Pro plan activated successfully via ${paymentMethod.toUpperCase()}!`,
+      payment,
+    });
+  } catch (error) {
+    console.error("Error in local-pay:", error);
+    return res.status(500).json({ message: "Failed to process mobile banking payment" });
+  }
+});
+
 // POST /api/payments/webhook — Stripe Webhook handler
 router.post("/webhook", async (req, res) => {
   let event = req.body;
