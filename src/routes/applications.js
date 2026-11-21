@@ -29,6 +29,34 @@ router.post("/", verifyToken, verifyStudent, async (req, res) => {
       return res.status(409).json({ message: "You have already applied to this tuition" });
     }
 
+    // Double-booking check: prevent applying for an already accepted slot
+    const slotsToApply = Array.isArray(req.body.selectedSlots) && req.body.selectedSlots.length > 0
+      ? req.body.selectedSlots
+      : (preferredSchedule ? [preferredSchedule] : []);
+
+    if (slotsToApply.length > 0) {
+      const alreadyAccepted = await Application.find({
+        tuitionId: tuition._id,
+        status: "accepted",
+      });
+
+      const bookedSet = new Set();
+      for (const accepted of alreadyAccepted) {
+        if (Array.isArray(accepted.selectedSlots)) {
+          for (const s of accepted.selectedSlots) bookedSet.add(s);
+        }
+        if (accepted.preferredSchedule) bookedSet.add(accepted.preferredSchedule);
+      }
+
+      const conflicts = slotsToApply.filter((s) => bookedSet.has(s));
+      if (conflicts.length > 0) {
+        return res.status(409).json({
+          message: `The slot "${conflicts.join(", ")}" has already been booked and accepted for another student. Please pick an open slot.`,
+          conflictingSlots: conflicts,
+        });
+      }
+    }
+
     const user = await User.findOne({ email: req.user.email });
 
     const application = await Application.create({
@@ -97,6 +125,38 @@ router.patch("/:id/status", verifyToken, verifyTutor, async (req, res) => {
     }
     const application = await Application.findOne({ _id: req.params.id, tutorEmail: req.user.email });
     if (!application) return res.status(404).json({ message: "Application not found" });
+
+    // Double-booking guard when accepting
+    if (status === "accepted") {
+      const slotsToCheck = Array.isArray(application.selectedSlots) && application.selectedSlots.length > 0
+        ? application.selectedSlots
+        : (application.preferredSchedule ? [application.preferredSchedule] : []);
+
+      if (slotsToCheck.length > 0) {
+        const otherAccepted = await Application.find({
+          tuitionId: application.tuitionId,
+          status: "accepted",
+          _id: { $ne: application._id },
+        });
+
+        const bookedSet = new Set();
+        for (const other of otherAccepted) {
+          if (Array.isArray(other.selectedSlots)) {
+            for (const s of other.selectedSlots) bookedSet.add(s);
+          }
+          if (other.preferredSchedule) bookedSet.add(other.preferredSchedule);
+        }
+
+        const conflicting = slotsToCheck.filter((s) => bookedSet.has(s));
+        if (conflicting.length > 0) {
+          return res.status(409).json({
+            message: `Double-booking prevention: Slot "${conflicting.join(", ")}" is already booked by another accepted student.`,
+            conflictingSlots: conflicting,
+          });
+        }
+      }
+    }
+
     application.status = status;
     application.decidedAt = new Date();
     await application.save();

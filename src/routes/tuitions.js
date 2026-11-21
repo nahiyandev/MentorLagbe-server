@@ -246,9 +246,29 @@ router.get("/:id", async (req, res) => {
         const tutorUser = await User.findOne({ email: doc.tutorEmail }).select("availability phone");
         obj.tutorAvailability = tutorUser?.availability || [];
         obj.tutorPhone = tutorUser?.phone || "";
+
+        // Query all accepted applications to expose bookedSlots
+        const acceptedApps = await Application.find({
+          tuitionId: doc._id,
+          status: "accepted",
+        }).select("selectedSlots preferredSchedule");
+
+        const booked = new Set();
+        for (const app of acceptedApps) {
+          if (Array.isArray(app.selectedSlots)) {
+            for (const s of app.selectedSlots) {
+              if (s) booked.add(s);
+            }
+          }
+          if (app.preferredSchedule) {
+            booked.add(app.preferredSchedule);
+          }
+        }
+        obj.bookedSlots = Array.from(booked);
       } catch (_) {
         obj.tutorAvailability = [];
         obj.tutorPhone = "";
+        obj.bookedSlots = [];
       }
       return obj;
     };
