@@ -47,7 +47,7 @@ router.get("/stats", async (req, res) => {
 // ?search= (title/subject/location), ?subject=, ?classLevel=, ?mode=, ?minFee=, ?maxFee=, ?district=
 router.get("/", async (req, res) => {
   try {
-    const { search, subject, classLevel, mode, minFee, maxFee, district } = req.query;
+    const { search, subject, classLevel, mode, minFee, maxFee, district, sort } = req.query;
 
     const filter = { approvalStatus: "approved", isActive: true };
 
@@ -76,7 +76,12 @@ router.get("/", async (req, res) => {
       }
     }
 
-    const tuitions = await Tuition.find(filter).sort({ createdAt: -1 }).lean();
+    let sortOption = { createdAt: -1 };
+    if (sort === "fee_asc") sortOption = { monthlyFee: 1 };
+    if (sort === "fee_desc") sortOption = { monthlyFee: -1 };
+    if (sort === "oldest") sortOption = { createdAt: 1 };
+
+    const tuitions = await Tuition.find(filter).sort(sortOption).lean();
 
     // Attach real dynamic ratings aggregated from Review collection
     const tuitionIds = tuitions.map((t) => t._id);
@@ -99,11 +104,17 @@ router.get("/", async (req, res) => {
       };
     });
 
-    const enriched = tuitions.map((t) => ({
+    let enriched = tuitions.map((t) => ({
       ...t,
       averageRating: ratingMap[t._id.toString()]?.averageRating || 0,
       totalReviews: ratingMap[t._id.toString()]?.totalReviews || 0,
     }));
+
+    if (sort === "rating_desc") {
+      enriched = enriched.sort((a, b) => b.averageRating - a.averageRating);
+    } else if (sort === "rating_asc") {
+      enriched = enriched.sort((a, b) => a.averageRating - b.averageRating);
+    }
 
     res.json(enriched);
   } catch (error) {
