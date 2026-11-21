@@ -2,12 +2,63 @@ const express = require("express");
 const Stripe = require("stripe");
 const Payment = require("../models/Payment");
 const User = require("../models/User");
+const Coupon = require("../models/Coupon");
 const { verifyToken } = require("../middlewares/auth");
 
 const router = express.Router();
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
+
+// POST /api/payments/apply-coupon — validates a coupon and calculates discounted amount
+router.post("/apply-coupon", verifyToken, async (req, res) => {
+  try {
+    const { code, amount, currency = "usd" } = req.body;
+    if (!code || typeof code !== "string") {
+      return res.status(400).json({ message: "Coupon code is required" });
+    }
+
+    const cleanCode = code.trim().toUpperCase();
+    const coupon = await Coupon.findOne({ code: cleanCode, isActive: true });
+    if (!coupon) {
+      return res.status(404).json({ message: "Invalid or inactive coupon code" });
+    }
+
+    if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) {
+      return res.status(400).json({ message: "This coupon code has expired" });
+    }
+
+    if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) {
+      return res.status(400).json({ message: "This coupon has reached its maximum usage limit" });
+    }
+
+    const baseAmount = Number(amount) || (currency.toLowerCase() === "bdt" ? 1000 : 10);
+    let discount = 0;
+    if (coupon.discountType === "percentage") {
+      discount = (baseAmount * coupon.discountValue) / 100;
+    } else {
+      discount = coupon.discountValue;
+    }
+
+    const discountedAmount = Math.max(0, Number((baseAmount - discount).toFixed(2)));
+    const savings = Number((baseAmount - discountedAmount).toFixed(2));
+
+    res.json({
+      valid: true,
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
+      originalAmount: baseAmount,
+      discountedAmount,
+      savings,
+      currency,
+      description: coupon.description,
+    });
+  } catch (error) {
+    console.error("apply-coupon error:", error);
+    res.status(500).json({ message: error.message || "Failed to validate coupon" });
+  }
+});
 
 // POST /api/payments/checkout — creates Stripe Checkout session for Pro subscriptions
 router.post("/checkout", verifyToken, async (req, res) => {
@@ -18,7 +69,7 @@ router.post("/checkout", verifyToken, async (req, res) => {
         .json({ message: "Stripe is not configured on the server" });
     }
 
-    const { plan, planName, amount, userRole } = req.body;
+    const { plan, planName, amount, userRole, couponCode } = req.body;
     const user = await User.findOne({ email: req.user.email });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -32,8 +83,26 @@ router.post("/checkout", verifyToken, async (req, res) => {
 
     const effectivePlanName =
       planName || (effectiveRole === "tutor" ? "Tutor Pro" : "Student Pro");
-    const parsedAmount =
+    let parsedAmount =
       Number(amount) || (effectiveRole === "tutor" ? 15 : 10);
+
+    let appliedCoupon = null;
+    if (couponCode && typeof couponCode === "string") {
+      const cleanCode = couponCode.trim().toUpperCase();
+      const foundCoupon = await Coupon.findOne({ code: cleanCode, isActive: true });
+      if (foundCoupon && (!foundCoupon.expiresAt || new Date(foundCoupon.expiresAt) >= new Date())) {
+        appliedCoupon = foundCoupon;
+        let discount = 0;
+        if (foundCoupon.discountType === "percentage") {
+          discount = (parsedAmount * foundCoupon.discountValue) / 100;
+        } else {
+          discount = foundCoupon.discountValue;
+        }
+        parsedAmount = Math.max(1, Number((parsedAmount - discount).toFixed(2)));
+        foundCoupon.usedCount += 1;
+        await foundCoupon.save();
+      }
+    }
 
     const clientUrl =
       process.env.CLIENT_URL || "https://mentor-lagbe.vercel.app";
@@ -46,7 +115,9 @@ router.post("/checkout", verifyToken, async (req, res) => {
           price_data: {
             currency: "usd",
             product_data: {
-              name: `${effectivePlanName} — One-Time Payment`,
+              name: appliedCoupon
+                ? `${effectivePlanName} (${appliedCoupon.code} Applied) — One-Time Payment`
+                : `${effectivePlanName} — One-Time Payment`,
               description: `MentorLagbe ${effectivePlanName} One-Time Lifetime Pro Access for ${effectiveRole}s (No recurring subscription)`,
             },
             unit_amount: Math.round(parsedAmount * 100),
@@ -64,6 +135,7 @@ router.post("/checkout", verifyToken, async (req, res) => {
         planName: effectivePlanName,
         paymentType: "one_time",
         amount: String(parsedAmount),
+        couponCode: appliedCoupon ? appliedCoupon.code : "",
       },
     });
 
@@ -156,7 +228,7 @@ router.get("/verify-session", async (req, res) => {
 // POST /api/payments/local-pay — bKash / Nagad mobile banking payment & instant verification
 router.post("/local-pay", verifyToken, async (req, res) => {
   try {
-    const { paymentMethod, transactionId, senderNumber, planName, amount, userRole } = req.body;
+    const { paymentMethod, transactionId, senderNumber, planName, amount, userRole, couponCode } = req.body;
 
     if (!paymentMethod || !["bkash", "nagad"].includes(paymentMethod.toLowerCase())) {
       return res.status(400).json({ message: "Invalid payment method. Must be bkash or nagad." });
@@ -192,8 +264,26 @@ router.post("/local-pay", verifyToken, async (req, res) => {
 
     const effectivePlanName =
       planName || (effectiveRole === "tutor" ? "Tutor Pro" : "Student Pro");
-    const parsedAmount =
+    let parsedAmount =
       Number(amount) || (effectiveRole === "tutor" ? 1500 : 1000);
+
+    let appliedCouponCode = "";
+    if (couponCode && typeof couponCode === "string") {
+      const cleanCode = couponCode.trim().toUpperCase();
+      const foundCoupon = await Coupon.findOne({ code: cleanCode, isActive: true });
+      if (foundCoupon && (!foundCoupon.expiresAt || new Date(foundCoupon.expiresAt) >= new Date())) {
+        appliedCouponCode = foundCoupon.code;
+        let discount = 0;
+        if (foundCoupon.discountType === "percentage") {
+          discount = (parsedAmount * foundCoupon.discountValue) / 100;
+        } else {
+          discount = foundCoupon.discountValue;
+        }
+        parsedAmount = Math.max(0, Number((parsedAmount - discount).toFixed(2)));
+        foundCoupon.usedCount += 1;
+        await foundCoupon.save();
+      }
+    }
 
     const payment = await Payment.create({
       userEmail: user.email,
@@ -206,6 +296,7 @@ router.post("/local-pay", verifyToken, async (req, res) => {
       senderNumber: cleanSender,
       transactionId: cleanTrxId,
       stripeSessionId: `${paymentMethod.toLowerCase()}_${cleanTrxId}`,
+      couponCode: appliedCouponCode,
       paymentStatus: "paid",
       paidAt: new Date(),
     });

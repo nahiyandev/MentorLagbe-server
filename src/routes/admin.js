@@ -5,6 +5,7 @@ const User = require("../models/User");
 const Tuition = require("../models/Tuition");
 const Payment = require("../models/Payment");
 const Review = require("../models/Review");
+const Coupon = require("../models/Coupon");
 const { verifyToken, verifyAdmin } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -194,6 +195,79 @@ router.get("/transactions", async (req, res) => {
     res.json(payments);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch transactions" });
+  }
+});
+
+// GET /api/admin/coupons — list all coupons
+router.get("/coupons", async (req, res) => {
+  try {
+    const coupons = await Coupon.find().sort({ createdAt: -1 });
+    res.json(coupons);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch coupons" });
+  }
+});
+
+// POST /api/admin/coupons — create a new promo discount coupon
+router.post("/coupons", async (req, res) => {
+  try {
+    const {
+      code,
+      discountType = "percentage",
+      discountValue,
+      maxUses = 100,
+      expiresAt,
+      description,
+    } = req.body;
+
+    if (!code || !discountValue) {
+      return res.status(400).json({ message: "Code and discount value are required" });
+    }
+
+    const cleanCode = code.trim().toUpperCase();
+    const existing = await Coupon.findOne({ code: cleanCode });
+    if (existing) {
+      return res.status(409).json({ message: "Coupon code already exists" });
+    }
+
+    const coupon = await Coupon.create({
+      code: cleanCode,
+      discountType: ["percentage", "fixed"].includes(discountType) ? discountType : "percentage",
+      discountValue: Number(discountValue),
+      maxUses: Number(maxUses) || 100,
+      expiresAt: expiresAt ? new Date(expiresAt) : undefined,
+      description: description ? description.trim() : "",
+      createdBy: req.user.email,
+    });
+
+    res.status(201).json(coupon);
+  } catch (error) {
+    console.error("Create coupon error:", error);
+    res.status(500).json({ message: error.message || "Failed to create coupon" });
+  }
+});
+
+// PATCH /api/admin/coupons/:id/toggle — toggle coupon active status
+router.patch("/coupons/:id/toggle", async (req, res) => {
+  try {
+    const coupon = await Coupon.findById(req.params.id);
+    if (!coupon) return res.status(404).json({ message: "Coupon not found" });
+    coupon.isActive = !coupon.isActive;
+    await coupon.save();
+    res.json(coupon);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to toggle coupon status" });
+  }
+});
+
+// DELETE /api/admin/coupons/:id — delete a coupon
+router.delete("/coupons/:id", async (req, res) => {
+  try {
+    const coupon = await Coupon.findByIdAndDelete(req.params.id);
+    if (!coupon) return res.status(404).json({ message: "Coupon not found" });
+    res.json({ message: "Coupon deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete coupon" });
   }
 });
 

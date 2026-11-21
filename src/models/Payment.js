@@ -20,6 +20,7 @@ const paymentSchema = new mongoose.Schema({
   senderNumber: { type: String, default: "" },
   transactionId: { type: String, required: true, unique: true },
   stripeSessionId: { type: String, default: "" },
+  couponCode: { type: String, default: "" },
   paymentStatus: {
     type: String,
     enum: ["paid", "pending", "failed"],
