@@ -174,9 +174,11 @@ router.get("/tutor/:tutorEmail", async (req, res) => {
 // GET /api/reviews/can-review/:tuitionId — check if current student is eligible to review
 router.get("/can-review/:tuitionId", verifyToken, async (req, res) => {
   try {
+    const studentEmailRegex = { $regex: new RegExp(`^${(req.user.email || "").trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") };
+
     const application = await Application.findOne({
       tuitionId: req.params.tuitionId,
-      studentEmail: req.user.email,
+      studentEmail: studentEmailRegex,
       status: "accepted",
     });
 
@@ -186,7 +188,7 @@ router.get("/can-review/:tuitionId", verifyToken, async (req, res) => {
 
     const existingReview = await Review.findOne({
       tuitionId: req.params.tuitionId,
-      studentEmail: req.user.email,
+      studentEmail: studentEmailRegex,
     });
 
     res.json({ canReview: true, existingReview });

@@ -4,6 +4,7 @@ const express = require("express");
 const User = require("../models/User");
 const Tuition = require("../models/Tuition");
 const Payment = require("../models/Payment");
+const Review = require("../models/Review");
 const { verifyToken, verifyAdmin } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -11,11 +12,12 @@ const router = express.Router();
 // এই file-এর সব route-এ verifyToken + verifyAdmin লাগবে (একবার এখানে লিখলেই হবে)
 router.use(verifyToken, verifyAdmin);
 
-// GET /api/admin/stats — Overview: users, tutors, pending/approved, revenue
+// GET /api/admin/stats — Overview: users, tutors, pending/approved, revenue, reviews
 router.get("/stats", async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const totalTutors = await User.countDocuments({ role: "tutor" });
+    const totalReviews = await Review.countDocuments();
     const pendingTuitions = await Tuition.countDocuments({ approvalStatus: "pending" });
     const approvedTuitions = await Tuition.countDocuments({ approvalStatus: "approved" });
 
@@ -51,6 +53,7 @@ router.get("/stats", async (req, res) => {
     res.json({
       totalUsers,
       totalTutors,
+      totalReviews,
       pendingTuitions,
       approvedTuitions,
       totalRevenue: stripeRevenueUsd,
@@ -118,12 +121,12 @@ router.patch("/tuitions/:id/approve", async (req, res) => {
   }
 });
 
-// PATCH /api/admin/tuitions/:id/reject — টিউশন reject
+// PATCH /api/admin/tuitions/:id/reject — টিউশন reject (isActive false করা হয় যাতে active ব্যাজ না থাকে)
 router.patch("/tuitions/:id/reject", async (req, res) => {
   try {
     const tuition = await Tuition.findByIdAndUpdate(
       req.params.id,
-      { approvalStatus: "rejected" },
+      { approvalStatus: "rejected", isActive: false },
       { new: true }
     );
     if (!tuition) return res.status(404).json({ message: "Tuition not found" });
@@ -144,9 +147,14 @@ router.patch("/tuitions/bulk-status", async (req, res) => {
       return res.status(400).json({ message: "Status must be 'approved' or 'rejected'" });
     }
 
+    const updatePayload = { approvalStatus: status };
+    if (status === "rejected") {
+      updatePayload.isActive = false;
+    }
+
     const result = await Tuition.updateMany(
       { _id: { $in: tuitionIds } },
-      { $set: { approvalStatus: status } }
+      { $set: updatePayload }
     );
 
     // Send notifications to tutors
