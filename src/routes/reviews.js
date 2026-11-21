@@ -73,6 +73,20 @@ router.post("/", verifyToken, verifyStudent, async (req, res) => {
   }
 });
 
+// GET /api/reviews/featured — public real testimonials/reviews across the platform
+router.get("/featured", async (req, res) => {
+  try {
+    const reviews = await Review.find()
+      .sort({ rating: -1, createdAt: -1 })
+      .limit(6)
+      .lean();
+    res.json(reviews);
+  } catch (error) {
+    console.error("GET /api/reviews/featured error:", error);
+    res.status(500).json({ message: "Failed to fetch featured reviews", reviews: [] });
+  }
+});
+
 // GET /api/reviews/tuition/:tuitionId — public reviews for a tuition
 router.get("/tuition/:tuitionId", async (req, res) => {
   try {

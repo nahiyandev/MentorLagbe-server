@@ -28,7 +28,7 @@ router.get("/stats", async (req, res) => {
     const averageRating =
       avgAgg.length > 0 && typeof avgAgg[0].avg === "number"
         ? Number(avgAgg[0].avg.toFixed(1))
-        : 4.9;
+        : 0;
 
     res.json({
       totalTuitions,
