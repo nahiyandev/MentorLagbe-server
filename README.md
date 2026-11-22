@@ -42,7 +42,7 @@ Built with Express.js 5, Mongoose 9, and MongoDB Atlas.
 | :--- | :--- | :--- | :--- |
 | **Admin** | `nahiyanadmin@gmail.com` | `Rj612221` | System moderation, payouts, user roles, financial ledger |
 | **Tutor** | `nahiyandev+mltutor@gmail.com` | `Mentor1234` | Batch creation, applicant review, attendance, payout requests |
-| **Student** | `nahiyandev+mls01@gmail.com`<br>*(Alt: `fahim@gmail.com`)* | `Student1234`<br>*(Alt: `12345678`)* | Discovery, applications, payments, meet links, reviews |
+| **Student** | `nahiyandev+mls01@gmail.com` | `Student1234` | Discovery, applications, payments, meet links, reviews |
 
 ---
 
