@@ -336,6 +336,8 @@ router.get("/:id", async (req, res) => {
         obj.enrolledCount = enrolledCount;
         obj.remainingSeats = remainingSeats;
         obj.isFull = remainingSeats <= 0;
+        obj.responseTime = tutorUser?.plan === "pro" ? "~30 min" : "~2 hrs";
+        obj.responseBadge = tutorUser?.plan === "pro" ? "Priority Tutor (⚡ ~30m)" : "Fast Responder (~2 hrs)";
       } catch (_) {
         obj.tutorAvailability = [];
         obj.tutorPhone = "";

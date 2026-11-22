@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const User = require("../models/User");
 const Tuition = require("../models/Tuition");
 const Review = require("../models/Review");
+const Application = require("../models/Application");
 const { verifyToken } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -146,6 +147,53 @@ router.get("/tutor/:identifier", async (req, res) => {
 
     const subjects = [...new Set(tuitions.map((t) => t.subject))];
 
+    // Dynamic response time calculation
+    const respondedApps = await Application.find({
+      $or: [
+        { tutorEmail },
+        { tutorEmail: tutorEmail.toLowerCase() },
+        { tutorEmail: { $regex: new RegExp(`^${escapedEmail}$`, "i") } },
+      ],
+      status: { $in: ["accepted", "rejected"] },
+    });
+
+    let responseTime = "~1 hr";
+    let responseBadge = "Fast Responder";
+
+    if (respondedApps.length > 0) {
+      const totalDiffMs = respondedApps.reduce((acc, a) => {
+        const start = new Date(a.appliedAt || a.createdAt).getTime();
+        const end = new Date(a.updatedAt || a.createdAt).getTime();
+        const diff = Math.max(0, end - start);
+        return acc + diff;
+      }, 0);
+      const avgMinutes = Math.round(totalDiffMs / (respondedApps.length * 60 * 1000));
+
+      if (avgMinutes <= 30) {
+        responseTime = "~15 min";
+        responseBadge = "Lightning Fast (⚡ ~15m)";
+      } else if (avgMinutes <= 90) {
+        responseTime = "~1 hr";
+        responseBadge = "Fast Responder (~1 hr)";
+      } else if (avgMinutes <= 180) {
+        responseTime = "~2 hrs";
+        responseBadge = "Responsive (~2 hrs)";
+      } else if (avgMinutes <= 360) {
+        responseTime = "~4 hrs";
+        responseBadge = "Responsive (~4 hrs)";
+      } else if (avgMinutes <= 1440) {
+        responseTime = "Within 24 hrs";
+        responseBadge = "Replies within a day";
+      } else {
+        const days = Math.max(1, Math.round(avgMinutes / 1440));
+        responseTime = `Within ${days}d`;
+        responseBadge = `Replies in ${days} days`;
+      }
+    } else {
+      responseTime = tutor.plan === "pro" ? "~30 min" : "~2 hrs";
+      responseBadge = tutor.plan === "pro" ? "Priority Tutor (⚡ ~30m)" : "Active Tutor (~2 hrs)";
+    }
+
     res.json({
       tutor: {
         _id: tutor._id || null,
@@ -156,6 +204,9 @@ router.get("/tutor/:identifier", async (req, res) => {
         phone: tutor.phone || "",
         role: tutor.role || "tutor",
         plan: tutor.plan || "free",
+        availability: tutor.availability || [],
+        responseTime,
+        responseBadge,
         createdAt: tutor.createdAt || null,
       },
       tuitions,
