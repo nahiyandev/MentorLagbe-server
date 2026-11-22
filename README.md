@@ -12,7 +12,7 @@
 **High-performance, role-guarded RESTful API server powering MentorLagbe.**  
 Built with Express.js 5, Mongoose 9, and MongoDB Atlas.
 
-[Frontend Live Website](https://mentor-lagbe.vercel.app) • [Backend API Base](https://mentor-lagbe-server.vercel.app) • [Frontend Repo](https://github.com/nahiyandev/MentorLagbe)
+[Frontend Live Website](https://mentor-lagbe.vercel.app) • [Backend API Base](https://mentor-lagbe-server.vercel.app) • [Frontend Repo](https://github.com/Nahiyandev/MentorLagbe) • [Server Repo](https://github.com/Nahiyandev/MentorLagbe-server)
 
 </div>
 
@@ -40,8 +40,8 @@ Built with Express.js 5, Mongoose 9, and MongoDB Atlas.
 
 | Role | Email | Password | Scope |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `nahiyanadmin@gmail.com` | `12345678` | System moderation, payouts, user roles, financial ledger |
-| **Tutor** | `nahiyan@gmail.com` | `12345678` | Batch creation, applicant review, attendance, payout requests |
+| **Admin** | `nahiyanadmin@gmail.com` | `Rj612221` | System moderation, payouts, user roles, financial ledger |
+| **Tutor** | `nahiyandev+mltutor@gmail.com` | `Mentor1234` | Batch creation, applicant review, attendance, payout requests |
 | **Student** | `fahim@gmail.com` | `12345678` | Discovery, applications, payments, meet links, reviews |
 
 ---
