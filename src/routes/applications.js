@@ -227,6 +227,63 @@ router.patch("/:id/meet-link", verifyToken, verifyTutor, async (req, res) => {
   }
 });
 
+// PATCH /api/applications/:id/attendance — tutor marks class as completed ("Done")
+router.patch("/:id/attendance", verifyToken, verifyTutor, async (req, res) => {
+  try {
+    const { action = "increment", topic = "", note = "" } = req.body;
+    const application = await Application.findOne({
+      _id: req.params.id,
+      tutorEmail: req.user.email,
+    });
+    if (!application) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+    if (application.status !== "accepted") {
+      return res.status(400).json({
+        message: "Attendance can only be marked for accepted/enrolled students",
+      });
+    }
+
+    if (action === "decrement") {
+      application.completedClasses = Math.max(0, (application.completedClasses || 0) - 1);
+    } else {
+      application.completedClasses = (application.completedClasses || 0) + 1;
+      application.lastClassDate = new Date();
+      if (!Array.isArray(application.attendanceHistory)) {
+        application.attendanceHistory = [];
+      }
+      application.attendanceHistory.push({
+        date: new Date(),
+        topic: (topic || `Class Session #${application.completedClasses}`).trim(),
+        note: (note || "").trim(),
+      });
+    }
+
+    await application.save();
+
+    // Send notification to student about class completion
+    if (action !== "decrement") {
+      try {
+        await Notification.create({
+          recipientEmail: application.studentEmail,
+          recipientRole: "student",
+          title: "Class Completed! 🎓",
+          message: `Your tutor marked Class #${application.completedClasses} as finished for "${application.tuitionTitle}".`,
+          type: "system",
+          link: "/dashboard/student/sessions",
+        });
+      } catch (notifErr) {
+        console.warn("Could not notify student of class attendance:", notifErr);
+      }
+    }
+
+    res.json(application);
+  } catch (error) {
+    console.error("Failed to mark attendance:", error);
+    res.status(500).json({ message: "Failed to mark class attendance" });
+  }
+});
+
 // PATCH /api/applications/:id — student only, pending applications can be edited
 // Body: { studentPhone, preferredSchedule, studentNote }
 router.patch("/:id", verifyToken, verifyStudent, async (req, res) => {

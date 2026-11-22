@@ -20,6 +20,15 @@ const applicationSchema = new mongoose.Schema(
     selectedSlots: { type: [String], default: [] },
     meetLink: { type: String, default: "" },
     studentNote: { type: String, default: "" },
+    completedClasses: { type: Number, default: 0 },
+    lastClassDate: { type: Date },
+    attendanceHistory: [
+      {
+        date: { type: Date, default: Date.now },
+        topic: { type: String, default: "" },
+        note: { type: String, default: "" },
+      },
+    ],
     status: {
       type: String,
       enum: ["pending", "accepted", "rejected"],
