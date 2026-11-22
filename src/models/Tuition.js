@@ -15,6 +15,7 @@ const tuitionSchema = new mongoose.Schema(
     location: { type: String, required: true },
     monthlyFee: { type: Number, required: true },
     daysPerWeek: { type: Number, required: true },
+    seatLimit: { type: Number, default: 5 },
     bannerImage: { type: String, default: "" }, // ImgBB direct upload থেকে URL
     description: { type: String, required: true },
     tutorName: { type: String, required: true },

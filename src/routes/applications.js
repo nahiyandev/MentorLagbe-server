@@ -29,6 +29,19 @@ router.post("/", verifyToken, verifyStudent, async (req, res) => {
       return res.status(409).json({ message: "You have already applied to this tuition" });
     }
 
+    // Batch seat limit guard:
+    const seatLimit = tuition.seatLimit || 5;
+    const acceptedCount = await Application.countDocuments({
+      tuitionId: tuition._id,
+      status: "accepted",
+    });
+
+    if (acceptedCount >= seatLimit) {
+      return res.status(400).json({
+        message: `This batch is already full (${acceptedCount}/${seatLimit} seats taken). No more applications can be accepted.`,
+      });
+    }
+
     // Double-booking check: prevent applying for an already accepted slot
     const slotsToApply = Array.isArray(req.body.selectedSlots) && req.body.selectedSlots.length > 0
       ? req.body.selectedSlots
@@ -128,6 +141,19 @@ router.patch("/:id/status", verifyToken, verifyTutor, async (req, res) => {
 
     // Double-booking guard when accepting
     if (status === "accepted") {
+      const tuition = await Tuition.findById(application.tuitionId);
+      const seatLimit = tuition?.seatLimit || 5;
+      const alreadyAcceptedCount = await Application.countDocuments({
+        tuitionId: application.tuitionId,
+        status: "accepted",
+        _id: { $ne: application._id },
+      });
+      if (alreadyAcceptedCount >= seatLimit) {
+        return res.status(400).json({
+          message: `Cannot accept: This batch is already full (${alreadyAcceptedCount}/${seatLimit} seats filled).`,
+        });
+      }
+
       const slotsToCheck = Array.isArray(application.selectedSlots) && application.selectedSlots.length > 0
         ? application.selectedSlots
         : (application.preferredSchedule ? [application.preferredSchedule] : []);

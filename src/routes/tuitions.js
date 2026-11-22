@@ -104,11 +104,29 @@ router.get("/", async (req, res) => {
       };
     });
 
-    let enriched = tuitions.map((t) => ({
-      ...t,
-      averageRating: ratingMap[t._id.toString()]?.averageRating || 0,
-      totalReviews: ratingMap[t._id.toString()]?.totalReviews || 0,
-    }));
+    const appAgg = await Application.aggregate([
+      { $match: { tuitionId: { $in: tuitionIds }, status: "accepted" } },
+      { $group: { _id: "$tuitionId", count: { $sum: 1 } } },
+    ]);
+    const appMap = {};
+    appAgg.forEach((a) => {
+      appMap[a._id.toString()] = a.count;
+    });
+
+    let enriched = tuitions.map((t) => {
+      const seatLimit = t.seatLimit || 5;
+      const enrolledCount = appMap[t._id.toString()] || 0;
+      const remainingSeats = Math.max(0, seatLimit - enrolledCount);
+      return {
+        ...t,
+        seatLimit,
+        enrolledCount,
+        remainingSeats,
+        isFull: remainingSeats <= 0,
+        averageRating: ratingMap[t._id.toString()]?.averageRating || 0,
+        totalReviews: ratingMap[t._id.toString()]?.totalReviews || 0,
+      };
+    });
 
     if (sort === "rating_desc") {
       enriched = enriched.sort((a, b) => b.averageRating - a.averageRating);
@@ -274,6 +292,14 @@ router.get("/:id", async (req, res) => {
           }
         }
         obj.bookedSlots = Array.from(booked);
+
+        const seatLimit = doc.seatLimit || 5;
+        const enrolledCount = acceptedApps.length;
+        const remainingSeats = Math.max(0, seatLimit - enrolledCount);
+        obj.seatLimit = seatLimit;
+        obj.enrolledCount = enrolledCount;
+        obj.remainingSeats = remainingSeats;
+        obj.isFull = remainingSeats <= 0;
       } catch (_) {
         obj.tutorAvailability = [];
         obj.tutorPhone = "";
@@ -331,7 +357,7 @@ router.get("/:id", async (req, res) => {
 // Free plan: max 2 টিউশন; Pro: unlimited (plan User collection থেকে দেখে)
 router.post("/", verifyToken, verifyTutor, async (req, res) => {
   try {
-    const { title, subject, classLevel, mode, location, monthlyFee, daysPerWeek, bannerImage, description, tutorName } = req.body;
+    const { title, subject, classLevel, mode, location, monthlyFee, daysPerWeek, bannerImage, description, tutorName, seatLimit } = req.body;
 
     if (!title || !subject || !classLevel || !mode || !monthlyFee) {
       return res.status(400).json({ message: "Title, subject, class level, mode and monthly fee are required" });
@@ -347,6 +373,7 @@ router.post("/", verifyToken, verifyTutor, async (req, res) => {
     const tuition = await Tuition.create({
       title, subject, classLevel, mode, location, monthlyFee,
       daysPerWeek, bannerImage, description,
+      seatLimit: seatLimit ? Math.max(1, Number(seatLimit)) : 5,
       tutorName: tutorName || user?.name || "Tutor",
       tutorEmail: req.user.email,
       approvalStatus: "pending", // admin approve না করা পর্যন্ত public-এ দেখাবে না
@@ -364,7 +391,7 @@ router.put("/:id", verifyToken, verifyTutor, async (req, res) => {
   try {
     const tuition = await Tuition.findOne({ _id: req.params.id, tutorEmail: req.user.email });
     if (!tuition) return res.status(404).json({ message: "Tuition not found" });
-    const fields = ["title", "subject", "classLevel", "mode", "location", "monthlyFee", "daysPerWeek", "bannerImage", "description"];
+    const fields = ["title", "subject", "classLevel", "mode", "location", "monthlyFee", "daysPerWeek", "bannerImage", "description", "seatLimit"];
     fields.forEach((f) => { if (req.body[f] !== undefined) tuition[f] = req.body[f]; });
     await tuition.save();
     res.json(tuition);
