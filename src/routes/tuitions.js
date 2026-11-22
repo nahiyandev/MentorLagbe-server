@@ -144,8 +144,38 @@ router.get("/", async (req, res) => {
 // NOTE: এটা /:id-এর আগে থাকতে হবে, নাহলে "my-tuitions"-কে id ধরে নেবে
 router.get("/my-tuitions", verifyToken, verifyTutor, async (req, res) => {
   try {
-    const tuitions = await Tuition.find({ tutorEmail: req.user.email }).sort({ createdAt: -1 });
-    res.json(tuitions);
+    const email = req.user.email;
+    const tuitions = await Tuition.find({
+      $or: [
+        { tutorEmail: email },
+        { tutorEmail: email.toLowerCase() },
+      ],
+    }).sort({ createdAt: -1 }).lean();
+
+    const tuitionIds = tuitions.map((t) => t._id);
+    const appAgg = await Application.aggregate([
+      { $match: { tuitionId: { $in: tuitionIds }, status: "accepted" } },
+      { $group: { _id: "$tuitionId", count: { $sum: 1 } } },
+    ]);
+    const appMap = {};
+    appAgg.forEach((a) => {
+      appMap[a._id.toString()] = a.count;
+    });
+
+    const enriched = tuitions.map((t) => {
+      const seatLimit = t.seatLimit || 5;
+      const enrolledCount = appMap[t._id.toString()] || 0;
+      const remainingSeats = Math.max(0, seatLimit - enrolledCount);
+      return {
+        ...t,
+        seatLimit,
+        enrolledCount,
+        remainingSeats,
+        isFull: remainingSeats <= 0,
+      };
+    });
+
+    res.json(enriched);
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch your tuitions" });
   }
