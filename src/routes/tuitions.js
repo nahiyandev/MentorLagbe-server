@@ -58,8 +58,14 @@ router.get("/", async (req, res) => {
         { location: { $regex: search, $options: "i" } },
       ];
     }
-    if (subject) filter.subject = subject;
-    if (classLevel) filter.classLevel = classLevel;
+    if (subject && subject.trim()) {
+      filter.subject = { $regex: new RegExp(`^${subject.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") };
+    }
+    if (classLevel && classLevel.trim()) {
+      const escaped = classLevel.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const normalizedRegex = escaped.replace(/[\u2013\u2014–—]/g, "[-–—]");
+      filter.classLevel = { $regex: new RegExp(`^${normalizedRegex}$`, "i") };
+    }
     if (mode) filter.mode = mode;
 
     if (district && district.trim()) {
