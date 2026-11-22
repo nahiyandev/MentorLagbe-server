@@ -90,20 +90,20 @@ router.post("/", verifyToken, verifyStudent, async (req, res) => {
 });
 
 // GET /api/reviews/featured — public real testimonials/reviews across the platform
-// Guarantees distinct students and distinct non-repeating feedback across the 6 featured cards
+// Guarantees random distinct students and distinct non-repeating feedback across the 6 featured cards
 router.get("/featured", async (req, res) => {
   try {
-    const candidateReviews = await Review.find({ rating: { $gte: 4 } })
-      .sort({ rating: -1, createdAt: -1 })
-      .limit(60)
-      .lean();
+    const candidateReviews = await Review.find({ rating: { $gte: 4 } }).lean();
+
+    // Randomly shuffle candidates on every API call so reviews arrive randomly
+    const shuffled = candidateReviews.sort(() => Math.random() - 0.5);
 
     const featured = [];
     const seenStudents = new Set();
     const seenFeedbacks = [];
 
     // Pass 1: Strict distinct student AND distinct non-repeating feedback
-    for (const r of candidateReviews) {
+    for (const r of shuffled) {
       const studentKey = (r.studentEmail || r.studentName || "").toLowerCase().trim();
       if (!studentKey || seenStudents.has(studentKey)) continue;
 
@@ -120,7 +120,7 @@ router.get("/featured", async (req, res) => {
 
     // Pass 2: If fewer than 6, fill with unique students
     if (featured.length < 6) {
-      for (const r of candidateReviews) {
+      for (const r of shuffled) {
         const studentKey = (r.studentEmail || r.studentName || "").toLowerCase().trim();
         if (studentKey && !seenStudents.has(studentKey)) {
           seenStudents.add(studentKey);
