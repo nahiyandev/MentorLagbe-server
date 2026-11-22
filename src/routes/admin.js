@@ -6,6 +6,7 @@ const Tuition = require("../models/Tuition");
 const Payment = require("../models/Payment");
 const Review = require("../models/Review");
 const Coupon = require("../models/Coupon");
+const Notification = require("../models/Notification");
 const { verifyToken, verifyAdmin } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -94,6 +95,71 @@ router.patch("/users/:id/role", async (req, res) => {
     res.json(user);
   } catch (error) {
     res.status(500).json({ message: "Failed to update role" });
+  }
+});
+
+// PATCH /api/admin/users/:id/status — Admin block / unblock user
+// Body: { status: "active" | "blocked", reason: "optional text" }
+router.patch("/users/:id/status", async (req, res) => {
+  try {
+    const { status, reason } = req.body;
+    if (!["active", "blocked"].includes(status)) {
+      return res.status(400).json({ message: "Status must be active or blocked" });
+    }
+
+    // Admin cannot block their own account
+    if (String(req.user.id) === req.params.id) {
+      return res.status(403).json({ message: "You cannot block your own account" });
+    }
+
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Admin cannot block another admin
+    if (targetUser.role === "admin") {
+      return res.status(403).json({ message: "Cannot block an administrator account" });
+    }
+
+    const updateData = {};
+    if (status === "blocked") {
+      updateData.status = "blocked";
+      updateData.blockedReason = typeof reason === "string" ? reason.trim() : "";
+      updateData.blockedAt = new Date();
+    } else {
+      updateData.status = "active";
+      updateData.blockedReason = "";
+      updateData.blockedAt = null;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData },
+      { new: true }
+    ).select("-__v");
+
+    // Create Notification for the user
+    try {
+      await Notification.create({
+        recipientEmail: updatedUser.email,
+        recipientRole: updatedUser.role,
+        title: status === "blocked" ? "Account Blocked" : "Account Unblocked",
+        message:
+          status === "blocked"
+            ? `Your account was blocked by an administrator.${updatedUser.blockedReason ? ` Reason: ${updatedUser.blockedReason}.` : ""} Contact support to appeal.`
+            : "Your account has been unblocked by an administrator. All privileges are restored.",
+        type: "system",
+        link: "/dashboard",
+      });
+    } catch (notifErr) {
+      console.warn("Failed to create status change notification:", notifErr);
+    }
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error("PATCH /api/admin/users/:id/status error:", error);
+    res.status(500).json({ message: "Failed to update user status" });
   }
 });
 
