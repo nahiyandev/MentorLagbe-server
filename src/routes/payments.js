@@ -225,6 +225,23 @@ router.get("/verify-session", async (req, res) => {
   }
 });
 
+// GET /api/payments/my-payments — student/user's personal payment history
+router.get("/my-payments", verifyToken, async (req, res) => {
+  try {
+    const email = req.user.email;
+    const payments = await Payment.find({
+      $or: [
+        { userEmail: email },
+        { userEmail: email.toLowerCase() },
+      ],
+    }).sort({ paidAt: -1 });
+    res.json(payments);
+  } catch (error) {
+    console.error("Failed to fetch my payments:", error);
+    res.status(500).json({ message: "Failed to fetch payment history" });
+  }
+});
+
 // POST /api/payments/local-pay — bKash / Nagad mobile banking payment & instant verification
 router.post("/local-pay", verifyToken, async (req, res) => {
   try {
