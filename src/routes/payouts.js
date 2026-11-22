@@ -2,10 +2,10 @@ const express = require("express");
 const router = express.Router();
 const PayoutRequest = require("../models/PayoutRequest");
 const Notification = require("../models/Notification");
-const { verifyToken, verifyTutor, verifyAdmin } = require("../middlewares/auth");
+const { verifyToken, verifyTutor, verifyAdmin, verifyActiveUser } = require("../middlewares/auth");
 
 // POST /api/payouts — tutor submits a payout request
-router.post("/", verifyToken, verifyTutor, async (req, res) => {
+router.post("/", verifyToken, verifyTutor, verifyActiveUser, async (req, res) => {
   try {
     const { amount, paymentMethod, accountNumber } = req.body;
     const tutorEmail = req.user.email;

@@ -3,7 +3,7 @@ const Stripe = require("stripe");
 const Payment = require("../models/Payment");
 const User = require("../models/User");
 const Coupon = require("../models/Coupon");
-const { verifyToken } = require("../middlewares/auth");
+const { verifyToken, verifyActiveUser } = require("../middlewares/auth");
 
 const router = express.Router();
 const stripe = process.env.STRIPE_SECRET_KEY
@@ -11,7 +11,7 @@ const stripe = process.env.STRIPE_SECRET_KEY
   : null;
 
 // POST /api/payments/apply-coupon — validates a coupon and calculates discounted amount
-router.post("/apply-coupon", verifyToken, async (req, res) => {
+router.post("/apply-coupon", verifyToken, verifyActiveUser, async (req, res) => {
   try {
     const { code, amount, currency = "usd" } = req.body;
     if (!code || typeof code !== "string") {
@@ -61,7 +61,7 @@ router.post("/apply-coupon", verifyToken, async (req, res) => {
 });
 
 // POST /api/payments/checkout — creates Stripe Checkout session for Pro subscriptions
-router.post("/checkout", verifyToken, async (req, res) => {
+router.post("/checkout", verifyToken, verifyActiveUser, async (req, res) => {
   try {
     if (!stripe) {
       return res
@@ -243,7 +243,7 @@ router.get("/my-payments", verifyToken, async (req, res) => {
 });
 
 // POST /api/payments/local-pay — bKash / Nagad mobile banking payment & instant verification
-router.post("/local-pay", verifyToken, async (req, res) => {
+router.post("/local-pay", verifyToken, verifyActiveUser, async (req, res) => {
   try {
     const { paymentMethod, transactionId, senderNumber, planName, amount, userRole, couponCode } = req.body;
 

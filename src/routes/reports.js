@@ -1,12 +1,12 @@
 const express = require("express");
 const Report = require("../models/Report");
 const Tuition = require("../models/Tuition");
-const { verifyToken, verifyAdmin } = require("../middlewares/auth");
+const { verifyToken, verifyAdmin, verifyActiveUser } = require("../middlewares/auth");
 
 const router = express.Router();
 
 // POST /api/reports — Submit a listing report
-router.post("/", verifyToken, async (req, res) => {
+router.post("/", verifyToken, verifyActiveUser, async (req, res) => {
   try {
     const { tuitionId, reason, details } = req.body;
     if (!tuitionId || !reason || !details || !details.trim()) {

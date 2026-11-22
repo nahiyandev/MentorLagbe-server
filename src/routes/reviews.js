@@ -4,7 +4,7 @@ const Review = require("../models/Review");
 const Application = require("../models/Application");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
-const { verifyToken, verifyStudent } = require("../middlewares/auth");
+const { verifyToken, verifyStudent, verifyActiveUser } = require("../middlewares/auth");
 
 const router = express.Router();
 
@@ -25,7 +25,7 @@ function areSimilarFeedback(textA, textB) {
 }
 
 // POST /api/reviews — student only (must have an accepted application)
-router.post("/", verifyToken, verifyStudent, async (req, res) => {
+router.post("/", verifyToken, verifyStudent, verifyActiveUser, async (req, res) => {
   try {
     const { tuitionId, rating, feedback } = req.body;
     const numRating = Number(rating);

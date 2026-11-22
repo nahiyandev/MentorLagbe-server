@@ -6,7 +6,7 @@ const Tuition = require("../models/Tuition");
 const User = require("../models/User");
 const Review = require("../models/Review");
 const Application = require("../models/Application");
-const { verifyToken, verifyTutor } = require("../middlewares/auth");
+const { verifyToken, verifyTutor, verifyActiveUser } = require("../middlewares/auth");
 
 const router = express.Router();
 
@@ -393,7 +393,7 @@ router.get("/:id", async (req, res) => {
 
 // POST /api/tuitions — tutor only
 // Free plan: max 2 টিউশন; Pro: unlimited (plan User collection থেকে দেখে)
-router.post("/", verifyToken, verifyTutor, async (req, res) => {
+router.post("/", verifyToken, verifyTutor, verifyActiveUser, async (req, res) => {
   try {
     const { title, subject, classLevel, mode, location, monthlyFee, daysPerWeek, bannerImage, description, tutorName, seatLimit } = req.body;
 
@@ -425,7 +425,7 @@ router.post("/", verifyToken, verifyTutor, async (req, res) => {
 });
 
 // PUT /api/tuitions/:id — tutor only, নিজের টিউশনই edit করতে পারবে
-router.put("/:id", verifyToken, verifyTutor, async (req, res) => {
+router.put("/:id", verifyToken, verifyTutor, verifyActiveUser, async (req, res) => {
   try {
     const tuition = await Tuition.findOne({ _id: req.params.id, tutorEmail: req.user.email });
     if (!tuition) return res.status(404).json({ message: "Tuition not found" });
@@ -439,7 +439,7 @@ router.put("/:id", verifyToken, verifyTutor, async (req, res) => {
 });
 
 // PATCH /api/tuitions/:id/toggle — Active/Closed toggle (tutor only, নিজেরটা)
-router.patch("/:id/toggle", verifyToken, verifyTutor, async (req, res) => {
+router.patch("/:id/toggle", verifyToken, verifyTutor, verifyActiveUser, async (req, res) => {
   try {
     const tuition = await Tuition.findOne({ _id: req.params.id, tutorEmail: req.user.email });
     if (!tuition) return res.status(404).json({ message: "Tuition not found" });
@@ -452,7 +452,7 @@ router.patch("/:id/toggle", verifyToken, verifyTutor, async (req, res) => {
 });
 
 // DELETE /api/tuitions/:id — tutor only, নিজের টিউশনই delete করতে পারবে
-router.delete("/:id", verifyToken, verifyTutor, async (req, res) => {
+router.delete("/:id", verifyToken, verifyTutor, verifyActiveUser, async (req, res) => {
   try {
     const tuition = await Tuition.findOneAndDelete({ _id: req.params.id, tutorEmail: req.user.email });
     if (!tuition) return res.status(404).json({ message: "Tuition not found" });

@@ -5,14 +5,14 @@ const Application = require("../models/Application");
 const Tuition = require("../models/Tuition");
 const User = require("../models/User");
 const Notification = require("../models/Notification");
-const { verifyToken, verifyStudent, verifyTutor } = require("../middlewares/auth");
+const { verifyToken, verifyStudent, verifyTutor, verifyActiveUser } = require("../middlewares/auth");
 
 const router = express.Router();
 
 // POST /api/applications — student only
 // Body: tuitionId, studentPhone, preferredSchedule, studentNote
 // tuitionTitle/subject/monthlyFee/tutorEmail — server টিউশন থেকে নেয় (client-এর উপর ভরসা নয়)
-router.post("/", verifyToken, verifyStudent, async (req, res) => {
+router.post("/", verifyToken, verifyStudent, verifyActiveUser, async (req, res) => {
   try {
     const { tuitionId, studentPhone, preferredSchedule, studentNote } = req.body;
     if (!tuitionId || !studentPhone) {
@@ -130,7 +130,7 @@ router.get("/tutor", verifyToken, verifyTutor, async (req, res) => {
 
 // PATCH /api/applications/:id/status — tutor only, নিজের টিউশনের application
 // Body: { status: "accepted" | "rejected" }
-router.patch("/:id/status", verifyToken, verifyTutor, async (req, res) => {
+router.patch("/:id/status", verifyToken, verifyTutor, verifyActiveUser, async (req, res) => {
   try {
     const { status } = req.body;
     if (!["accepted", "rejected"].includes(status)) {
@@ -211,7 +211,7 @@ router.patch("/:id/status", verifyToken, verifyTutor, async (req, res) => {
 });
 
 // PATCH /api/applications/:id/meet-link — tutor sets or updates Google Meet link for accepted applicant
-router.patch("/:id/meet-link", verifyToken, verifyTutor, async (req, res) => {
+router.patch("/:id/meet-link", verifyToken, verifyTutor, verifyActiveUser, async (req, res) => {
   try {
     const { meetLink } = req.body;
     const application = await Application.findOne({
@@ -254,7 +254,7 @@ router.patch("/:id/meet-link", verifyToken, verifyTutor, async (req, res) => {
 });
 
 // PATCH /api/applications/:id/attendance — tutor marks class as completed ("Done")
-router.patch("/:id/attendance", verifyToken, verifyTutor, async (req, res) => {
+router.patch("/:id/attendance", verifyToken, verifyTutor, verifyActiveUser, async (req, res) => {
   try {
     const { action = "increment", topic = "", note = "" } = req.body;
     const application = await Application.findOne({
@@ -312,7 +312,7 @@ router.patch("/:id/attendance", verifyToken, verifyTutor, async (req, res) => {
 
 // PATCH /api/applications/:id — student only, pending applications can be edited
 // Body: { studentPhone, preferredSchedule, studentNote }
-router.patch("/:id", verifyToken, verifyStudent, async (req, res) => {
+router.patch("/:id", verifyToken, verifyStudent, verifyActiveUser, async (req, res) => {
   try {
     const { studentPhone, preferredSchedule, selectedSlots, studentNote } = req.body;
     if (!studentPhone && !preferredSchedule && !selectedSlots && studentNote === undefined) {
@@ -347,7 +347,7 @@ router.patch("/:id", verifyToken, verifyStudent, async (req, res) => {
 });
 
 // DELETE /api/applications/:id — student only, শুধু pending থাকলে cancel করা যাবে
-router.delete("/:id", verifyToken, verifyStudent, async (req, res) => {
+router.delete("/:id", verifyToken, verifyStudent, verifyActiveUser, async (req, res) => {
   try {
     const application = await Application.findOne({ _id: req.params.id, studentEmail: req.user.email });
     if (!application) return res.status(404).json({ message: "Application not found" });

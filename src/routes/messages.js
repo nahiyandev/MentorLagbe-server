@@ -61,6 +61,27 @@ router.post("/", verifyToken, async (req, res) => {
 
     const senderUser = await User.findOne({ email: req.user.email });
 
+    // Blocked check: blocked user can ONLY message Admin (appeal)
+    let sender = null;
+    if (req.user.id) {
+      sender = await User.findById(req.user.id);
+    }
+    if (!sender) {
+      sender = senderUser;
+    }
+
+    if (sender && sender.status === "blocked") {
+      const isAppealToAdmin = Boolean(
+        toAdmin ||
+        recipientEmail === "admin" ||
+        (recipientUser && recipientUser.role === "admin") ||
+        (recipientEmail && recipientEmail.toLowerCase() === "nahiyanadmin@gmail.com")
+      );
+      if (!isAppealToAdmin) {
+        return res.status(403).json({ message: "Your account is blocked. Contact support to appeal." });
+      }
+    }
+
     let tuitionTitle = customTitle || "";
     if (tuitionId) {
       const tuition = await Tuition.findById(tuitionId);

@@ -4,7 +4,7 @@ const User = require("../models/User");
 const Tuition = require("../models/Tuition");
 const Review = require("../models/Review");
 const Application = require("../models/Application");
-const { verifyToken } = require("../middlewares/auth");
+const { verifyToken, verifyActiveUser } = require("../middlewares/auth");
 
 const router = express.Router();
 
@@ -24,7 +24,7 @@ router.get("/", verifyToken, async (req, res) => {
 
 // PATCH /api/profile — update name, phone, bio, image
 // Strictly ignores and disallows email, role, and plan updates
-router.patch("/", verifyToken, async (req, res) => {
+router.patch("/", verifyToken, verifyActiveUser, async (req, res) => {
   try {
     const { name, phone, bio, image, availability } = req.body;
     const updateData = {};
