@@ -28,6 +28,9 @@ const userSchema = new mongoose.Schema(
       enum: ["free", "pro"], // নতুন user মানেই 'free'
       default: "free",
     },
+    status: { type: String, enum: ["active", "blocked"], default: "active" },
+    blockedReason: { type: String, default: "" },
+    blockedAt: { type: Date, default: null },
     availability: {
       type: [availabilitySlotSchema],
       default: [

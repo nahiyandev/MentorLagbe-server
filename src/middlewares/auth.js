@@ -65,4 +65,30 @@ const verifyStudent = verifyRole("student");
 const verifyTutor = verifyRole("tutor");
 const verifyAdmin = verifyRole("admin");
 
-module.exports = { verifyToken, verifyStudent, verifyTutor, verifyAdmin };
+// ৩. Active User চেক — verifyToken-এর পরে বসে; blocked হলে ৪০৩
+async function verifyActiveUser(req, res, next) {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized: user not found in request" });
+    }
+    let user = null;
+    if (req.user.id) {
+      user = await User.findById(req.user.id);
+    }
+    if (!user && req.user.email) {
+      user = await User.findOne({ email: req.user.email });
+    }
+    if (!user) {
+      return res.status(401).json({ message: "Unauthorized: user not found" });
+    }
+    if (user.status === "blocked") {
+      return res.status(403).json({ message: "Your account is blocked. Contact support to appeal." });
+    }
+    next();
+  } catch (error) {
+    console.error("verifyActiveUser error:", error);
+    return res.status(500).json({ message: "Failed to verify account status" });
+  }
+}
+
+module.exports = { verifyToken, verifyStudent, verifyTutor, verifyAdmin, verifyActiveUser };
