@@ -158,18 +158,28 @@ router.get("/tutor/:identifier", async (req, res) => {
     });
 
     let responseTime = "~1 hr";
-    let responseBadge = "Fast Responder";
+    let responseBadge = "Fast Responder (~1 hr)";
 
     if (respondedApps.length > 0) {
-      const totalDiffMs = respondedApps.reduce((acc, a) => {
-        const start = new Date(a.appliedAt || a.createdAt).getTime();
-        const end = new Date(a.updatedAt || a.createdAt).getTime();
-        const diff = Math.max(0, end - start);
-        return acc + diff;
-      }, 0);
-      const avgMinutes = Math.round(totalDiffMs / (respondedApps.length * 60 * 1000));
+      const validDiffs = respondedApps
+        .map((a) => {
+          const startDate = a.appliedAt || (a.createdAt ? new Date(a.createdAt) : null) || (a._id ? a._id.getTimestamp() : null);
+          const endDate = a.decidedAt || a.updatedAt || a.appliedAt;
+          if (!startDate || !endDate) return null;
+          const start = new Date(startDate).getTime();
+          const end = new Date(endDate).getTime();
+          if (isNaN(start) || isNaN(end)) return null;
+          return Math.max(0, end - start);
+        })
+        .filter((d) => d !== null);
 
-      if (avgMinutes <= 30) {
+      const totalDiffMs = validDiffs.reduce((sum, d) => sum + d, 0);
+      const avgMinutes = validDiffs.length > 0 ? Math.round(totalDiffMs / (validDiffs.length * 60 * 1000)) : NaN;
+
+      if (isNaN(avgMinutes) || !isFinite(avgMinutes)) {
+        responseTime = "~1 hr";
+        responseBadge = "Fast Responder (~1 hr)";
+      } else if (avgMinutes <= 30) {
         responseTime = "~15 min";
         responseBadge = "Lightning Fast (⚡ ~15m)";
       } else if (avgMinutes <= 90) {
@@ -190,8 +200,8 @@ router.get("/tutor/:identifier", async (req, res) => {
         responseBadge = `Replies in ${days} days`;
       }
     } else {
-      responseTime = tutor.plan === "pro" ? "~30 min" : "~2 hrs";
-      responseBadge = tutor.plan === "pro" ? "Priority Tutor (⚡ ~30m)" : "Active Tutor (~2 hrs)";
+      responseTime = tutor.plan === "pro" ? "~30 min" : "~1 hr";
+      responseBadge = tutor.plan === "pro" ? "Priority Tutor (⚡ ~30m)" : "Fast Responder (~1 hr)";
     }
 
     res.json({
