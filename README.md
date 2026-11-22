@@ -36,6 +36,12 @@ Built with Express.js 5, Mongoose 9, and MongoDB Atlas.
 
 ---
 
+## 📦 Tech Stack & NPM Packages Used
+- express, mongoose, jsonwebtoken
+- stripe, cors, dotenv
+
+---
+
 ## 🔑 Role Accounts & Credentials
 
 | Role | Email | Password | Scope |
