@@ -187,11 +187,15 @@ router.get("/users/:id/summary", async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const [applicationsTotal, applicationsAccepted, reviewsGiven, tuitionsTotal, latestReviews] = await Promise.all([
+    const [applicationsTotal, applicationsAccepted, reviewsGiven, tuitionsTotal, latestApplications, latestReviews] = await Promise.all([
       Application.countDocuments({ studentEmail: user.email }),
       Application.countDocuments({ studentEmail: user.email, status: "accepted" }),
       Review.countDocuments({ studentEmail: user.email }),
       Tuition.countDocuments({ tutorEmail: user.email }),
+      Application.find({ studentEmail: user.email })
+        .sort({ appliedAt: -1, createdAt: -1 })
+        .limit(3)
+        .select("tuitionId tuitionTitle status appliedAt createdAt"),
       Review.find({ studentEmail: user.email })
         .sort({ createdAt: -1 })
         .limit(3)
@@ -203,6 +207,7 @@ router.get("/users/:id/summary", async (req, res) => {
       applicationsAccepted,
       reviewsGiven,
       tuitionsTotal,
+      latestApplications,
       latestReviews,
     });
   } catch (error) {
