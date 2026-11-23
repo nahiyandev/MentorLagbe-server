@@ -234,4 +234,76 @@ router.get("/tutor/:identifier", async (req, res) => {
   }
 });
 
+// GET /api/profile/student/:identifier — public student profile (never exposes email or phone)
+router.get("/student/:identifier", async (req, res) => {
+  try {
+    const rawIdentifier = req.params.identifier;
+    const identifier = fullyDecode(rawIdentifier);
+    let student = null;
+
+    if (mongoose.Types.ObjectId.isValid(identifier)) {
+      student = await User.findById(identifier).select("-__v");
+    }
+
+    const escapedId = escapeRegex(identifier);
+
+    if (!student) {
+      student = await User.findOne({
+        $or: [
+          { email: identifier },
+          { email: identifier.toLowerCase() },
+          { email: { $regex: new RegExp(`^${escapedId}$`, "i") } },
+        ],
+      }).select("-__v");
+    }
+
+    if (!student || student.role !== "student") {
+      return res.status(404).json({ message: "Student profile not found" });
+    }
+
+    const [applicationsTotal, applicationsAccepted, reviewsGiven, latestReviews] = await Promise.all([
+      Application.countDocuments({ studentEmail: student.email }),
+      Application.countDocuments({ studentEmail: student.email, status: "accepted" }),
+      Review.countDocuments({ studentEmail: student.email }),
+      Review.find({ studentEmail: student.email })
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .select("tuitionId tuitionTitle rating feedback createdAt"),
+    ]);
+
+    let averageRating = 0;
+    if (reviewsGiven > 0) {
+      const avgAgg = await Review.aggregate([
+        { $match: { studentEmail: student.email } },
+        { $group: { _id: null, avg: { $avg: "$rating" } } },
+      ]);
+      if (avgAgg.length > 0 && typeof avgAgg[0].avg === "number") {
+        averageRating = Number(avgAgg[0].avg.toFixed(1));
+      }
+    }
+
+    res.json({
+      student: {
+        _id: student._id || null,
+        name: student.name,
+        image: student.image || "",
+        bio: student.bio || "Student learning and building skills on MentorLagbe.",
+        plan: student.plan || "free",
+        role: "student",
+        createdAt: student.createdAt || null,
+      },
+      stats: {
+        applicationsTotal,
+        applicationsAccepted,
+        reviewsGiven,
+        averageRating,
+      },
+      reviews: latestReviews,
+    });
+  } catch (error) {
+    console.error("GET /api/profile/student/:identifier error:", error);
+    res.status(500).json({ message: "Failed to fetch student profile" });
+  }
+});
+
 module.exports = router;

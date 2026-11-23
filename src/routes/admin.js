@@ -1,12 +1,14 @@
 // src/routes/admin.js
 // Admin routes — users, tuitions, transactions, stats (admin only)
 const express = require("express");
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const Tuition = require("../models/Tuition");
 const Payment = require("../models/Payment");
 const Review = require("../models/Review");
 const Coupon = require("../models/Coupon");
 const Notification = require("../models/Notification");
+const Application = require("../models/Application");
 const { verifyToken, verifyAdmin } = require("../middlewares/auth");
 
 const router = express.Router();
@@ -160,6 +162,52 @@ router.patch("/users/:id/status", async (req, res) => {
   } catch (error) {
     console.error("PATCH /api/admin/users/:id/status error:", error);
     res.status(500).json({ message: "Failed to update user status" });
+  }
+});
+
+// GET /api/admin/users/:id/summary — per-user statistics & activity summary (admin-only)
+router.get("/users/:id/summary", async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    let user = null;
+
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      user = await User.findById(rawId);
+    }
+    if (!user) {
+      user = await User.findOne({
+        $or: [
+          { email: rawId },
+          { email: rawId.toLowerCase() },
+        ],
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const [applicationsTotal, applicationsAccepted, reviewsGiven, tuitionsTotal, latestReviews] = await Promise.all([
+      Application.countDocuments({ studentEmail: user.email }),
+      Application.countDocuments({ studentEmail: user.email, status: "accepted" }),
+      Review.countDocuments({ studentEmail: user.email }),
+      Tuition.countDocuments({ tutorEmail: user.email }),
+      Review.find({ studentEmail: user.email })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .select("tuitionId tuitionTitle rating feedback createdAt"),
+    ]);
+
+    res.json({
+      applicationsTotal,
+      applicationsAccepted,
+      reviewsGiven,
+      tuitionsTotal,
+      latestReviews,
+    });
+  } catch (error) {
+    console.error("GET /api/admin/users/:id/summary error:", error);
+    res.status(500).json({ message: "Failed to fetch user summary" });
   }
 });
 
