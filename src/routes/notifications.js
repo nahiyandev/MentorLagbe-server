@@ -57,4 +57,22 @@ router.patch("/mark-all-read", verifyToken, async (req, res) => {
   }
 });
 
+// POST /api/notifications/session-reminder — create reminder for upcoming session
+router.post("/session-reminder", verifyToken, async (req, res) => {
+  try {
+    const { tuitionTitle, timeText, meetLink } = req.body;
+    const notification = await Notification.create({
+      recipientEmail: req.user.email,
+      recipientRole: req.user.role || "student",
+      title: "Class Session Reminder ⏰",
+      message: `Reminder: Your class for "${tuitionTitle || "Tuition Session"}" is scheduled for ${timeText || "soon"}. Join link: ${meetLink || "Check Sessions dashboard"}.`,
+      type: "session_reminder",
+      link: "/dashboard/student/sessions",
+    });
+    res.status(201).json({ message: "Reminder scheduled successfully!", notification });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to schedule reminder" });
+  }
+});
+
 module.exports = router;

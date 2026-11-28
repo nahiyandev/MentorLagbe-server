@@ -19,6 +19,7 @@ const notificationSchema = new mongoose.Schema(
         "application_accepted",
         "application_rejected",
         "tuition_approved",
+        "session_reminder",
         "system",
       ],
       default: "system",
