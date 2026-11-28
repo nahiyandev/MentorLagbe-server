@@ -108,6 +108,132 @@ router.post("/", verifyToken, verifyStudent, verifyActiveUser, async (req, res) 
   }
 });
 
+// GET /api/applications/tutor/booked-slots — tutor sees all confirmed booked slots
+router.get("/tutor/booked-slots", verifyToken, verifyTutor, async (req, res) => {
+  try {
+    const acceptedApps = await Application.find({
+      tutorEmail: req.user.email,
+      status: "accepted",
+    }).sort({ updatedAt: -1 });
+
+    const bookedSlotsList = acceptedApps.map((app) => ({
+      _id: app._id,
+      tuitionId: app.tuitionId,
+      tuitionTitle: app.tuitionTitle,
+      subject: app.subject,
+      studentName: app.studentName,
+      studentEmail: app.studentEmail,
+      studentPhone: app.studentPhone,
+      slot: app.preferredSchedule || (app.selectedSlots && app.selectedSlots[0]) || "Standard Schedule",
+      selectedSlots: app.selectedSlots,
+      meetLink: app.meetLink,
+      bookedAt: app.decidedAt || app.createdAt,
+    }));
+
+    res.json(bookedSlotsList);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch tutor booked slots" });
+  }
+});
+
+// POST /api/applications/book-slot — student directly books a slot
+router.post("/book-slot", verifyToken, verifyStudent, verifyActiveUser, async (req, res) => {
+  try {
+    const { tuitionId, slotDay, slotTime, studentPhone, studentNote } = req.body;
+    if (!tuitionId || !slotDay || !slotTime) {
+      return res.status(400).json({ message: "Tuition, slot day, and slot time are required" });
+    }
+
+    const slotKey = `${slotDay.slice(0, 3)}: ${slotTime.trim()}`;
+
+    const tuition = await Tuition.findOne({ _id: tuitionId, approvalStatus: "approved", isActive: true });
+    if (!tuition) {
+      return res.status(404).json({ message: "Tuition not found or not active" });
+    }
+
+    // Check if user already booked/applied
+    const existing = await Application.findOne({ tuitionId, studentEmail: req.user.email });
+    if (existing) {
+      return res.status(409).json({ message: "You have already booked or applied to this tuition" });
+    }
+
+    // Seat limit check
+    const seatLimit = tuition.seatLimit || 5;
+    const acceptedCount = await Application.countDocuments({
+      tuitionId: tuition._id,
+      status: "accepted",
+    });
+    if (acceptedCount >= seatLimit) {
+      return res.status(400).json({ message: "This batch is already full. No more slots can be booked." });
+    }
+
+    // Double-booking check: is this slotKey already accepted?
+    const alreadyAccepted = await Application.find({
+      tuitionId: tuition._id,
+      status: "accepted",
+    });
+
+    for (const app of alreadyAccepted) {
+      if (Array.isArray(app.selectedSlots) && app.selectedSlots.includes(slotKey)) {
+        return res.status(409).json({ message: `Slot "${slotKey}" is already booked by another student.` });
+      }
+      if (app.preferredSchedule === slotKey) {
+        return res.status(409).json({ message: `Slot "${slotKey}" is already booked by another student.` });
+      }
+    }
+
+    const user = await User.findOne({ email: req.user.email });
+
+    const application = await Application.create({
+      tuitionId: tuition._id,
+      tuitionTitle: tuition.title,
+      subject: tuition.subject,
+      monthlyFee: tuition.monthlyFee,
+      tutorEmail: tuition.tutorEmail,
+      studentName: user?.name || "Student",
+      studentEmail: req.user.email,
+      studentPhone: studentPhone?.trim() || user?.phone || "—",
+      preferredSchedule: slotKey,
+      selectedSlots: [slotKey],
+      studentNote: studentNote?.trim() || "Direct Slot Booking",
+      status: "accepted", // Directly confirmed & booked!
+      decidedAt: new Date(),
+    });
+
+    // Notify tutor
+    try {
+      await Notification.create({
+        recipientEmail: tuition.tutorEmail,
+        recipientRole: "tutor",
+        title: "New Slot Booked! 📅",
+        message: `${application.studentName} has directly booked the slot "${slotKey}" for "${tuition.title}".`,
+        type: "application_accepted",
+        link: "/dashboard/tutor/availability",
+      });
+    } catch (_) {}
+
+    // Notify student
+    try {
+      await Notification.create({
+        recipientEmail: req.user.email,
+        recipientRole: "student",
+        title: "Slot Booking Confirmed! 🎉",
+        message: `Your class slot "${slotKey}" with ${tuition.tutorName} has been confirmed. View details in Class Sessions.`,
+        type: "application_accepted",
+        link: "/dashboard/student/sessions",
+      });
+    } catch (_) {}
+
+    res.status(201).json({
+      message: `Slot "${slotKey}" booked successfully!`,
+      booking: application,
+    });
+  } catch (error) {
+    console.error("Failed to book slot:", error);
+    res.status(500).json({ message: error.message || "Failed to book slot" });
+  }
+});
+
 // GET /api/applications/my-applications — student-এর নিজের applications
 router.get("/my-applications", verifyToken, verifyStudent, async (req, res) => {
   try {
