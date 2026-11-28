@@ -284,6 +284,198 @@ router.get("/tutor/analytics", verifyToken, verifyTutor, async (req, res) => {
   }
 });
 
+// POST /api/tuitions/ai-match — AI Tutor Matcher
+router.post("/ai-match", async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+      return res.status(400).json({ message: "Prompt is required for AI matching" });
+    }
+
+    const p = prompt.toLowerCase();
+
+    // 1. Detect Subject
+    const subjectKeywords = [
+      { name: "Mathematics", words: ["math", "mathematics", "গণিত", "ম্যাথ", "higher math", "উচ্চতর গণিত", "calculus", "বীজগণিত", "জ্যামিতি"] },
+      { name: "Physics", words: ["physics", "পদার্থ", "পদার্থবিজ্ঞান", "ফিজিক্স"] },
+      { name: "Chemistry", words: ["chemistry", "রসায়ন", "কেমিস্ট্রি"] },
+      { name: "Biology", words: ["biology", "জীববিজ্ঞান", "বায়োলজি", "জীব"] },
+      { name: "English", words: ["english", "ইংরেজি", "ইংরেজী", "grammar", "ielts", "spoken"] },
+      { name: "ICT", words: ["ict", "তথ্য ও যোগাযোগ", "computer", "কম্পিউটার", "programming"] },
+      { name: "Bangla", words: ["bangla", "বাংলা", "সাহিত্য", "ব্যাকরণ"] },
+      { name: "Accounting", words: ["accounting", "হিসাববিজ্ঞান", "হিসাব"] },
+      { name: "Finance", words: ["finance", "অর্থায়ন", "ব্যাংকিং"] },
+      { name: "Economics", words: ["economics", "অর্থনীতি"] },
+      { name: "General Science", words: ["science", "বিজ্ঞান", "সাধারণ বিজ্ঞান"] },
+    ];
+
+    let detectedSubject = "";
+    for (const sub of subjectKeywords) {
+      if (sub.words.some((w) => p.includes(w))) {
+        detectedSubject = sub.name;
+        break;
+      }
+    }
+
+    // 2. Detect Class Level
+    const classKeywords = [
+      { name: "University Admission", words: ["admission", "ভর্তি", "buet", "medical", "varsity", "মেডিকেল", "বুয়েট", "বিশ্ববিদ্যালয়"] },
+      { name: "HSC / Class 11–12", words: ["hsc", "class 11", "class 12", "১১শ", "১২শ", "এইচএসসি", "college", "কলেজ", "alim"] },
+      { name: "SSC / Class 9–10", words: ["ssc", "class 9", "class 10", "৯ম", "১০ম", "এসএসসি", "dakhil", "দাখিল"] },
+      { name: "Class 6–8", words: ["class 6", "class 7", "class 8", "৬ষ্ঠ", "৭ম", "৮ম", "jsc", "জেএসসি"] },
+      { name: "Class 1–5", words: ["class 1", "class 2", "class 3", "class 4", "class 5", "১ম", "২য়", "৩য়", "৪র্থ", "৫ম", "primary", "প্রাথমিক"] },
+    ];
+
+    let detectedClassLevel = "";
+    for (const cl of classKeywords) {
+      if (cl.words.some((w) => p.includes(w))) {
+        detectedClassLevel = cl.name;
+        break;
+      }
+    }
+
+    // 3. Detect Budget
+    let detectedBudget = 0;
+    const feeMatch = p.match(/(?:budget|বাজেট|fee|টাকা|ফি)?\s*[:=]?\s*(\d{1,2}(?:,\d{3})+|\d{3,6})\s*(?:k|tk|bdt|টাকা|taka)?/i);
+    if (feeMatch) {
+      let num = feeMatch[1].replace(/,/g, "");
+      detectedBudget = parseInt(num, 10);
+      if (detectedBudget < 100) detectedBudget *= 1000; // e.g. 5k -> 5000
+    }
+
+    // 4. Detect Mode
+    let detectedMode = "";
+    if (p.includes("online") || p.includes("অনলাইন") || p.includes("remote") || p.includes("meet") || p.includes("zoom")) {
+      detectedMode = "Online";
+    } else if (p.includes("offline") || p.includes("অফলাইন") || p.includes("হোম") || p.includes("বাসায়") || p.includes("home")) {
+      detectedMode = "Offline";
+    }
+
+    // Query active & approved tuitions
+    const allTuitions = await Tuition.find({ approvalStatus: "approved", isActive: true }).lean();
+
+    // Attach ratings, reviews and tutor details
+    const scoredTuitions = await Promise.all(
+      allTuitions.map(async (t) => {
+        const reviewAgg = await Review.aggregate([
+          { $match: { tuitionId: t._id } },
+          { $group: { _id: null, avgRating: { $avg: "$rating" }, total: { $sum: 1 } } },
+        ]);
+        const avgRating = reviewAgg[0]?.avgRating ? Number(reviewAgg[0].avgRating.toFixed(1)) : 5.0;
+        const totalReviews = reviewAgg[0]?.total || 0;
+
+        let score = 0;
+        const reasons = [];
+
+        // Subject Match (up to 40 pts)
+        if (detectedSubject) {
+          if (t.subject.toLowerCase() === detectedSubject.toLowerCase()) {
+            score += 40;
+            reasons.push(`Specialist in ${t.subject}`);
+          } else if (t.subject.toLowerCase().includes(detectedSubject.toLowerCase()) || detectedSubject.toLowerCase().includes(t.subject.toLowerCase())) {
+            score += 25;
+            reasons.push(`Teaches related ${t.subject}`);
+          }
+        } else {
+          score += 20; // baseline if no specific subject detected
+        }
+
+        // Class Level Match (up to 30 pts)
+        if (detectedClassLevel) {
+          const norm = (s) => s.replace(/[\u2013\u2014–—]/g, "-").toLowerCase();
+          if (norm(t.classLevel) === norm(detectedClassLevel)) {
+            score += 30;
+            reasons.push(`Targeted for ${t.classLevel}`);
+          } else if (norm(t.classLevel).includes(norm(detectedClassLevel)) || norm(detectedClassLevel).includes(norm(t.classLevel))) {
+            score += 15;
+            reasons.push(`Compatible with ${t.classLevel}`);
+          }
+        } else {
+          score += 15;
+        }
+
+        // Budget match (up to 20 pts)
+        if (detectedBudget > 0) {
+          if (t.monthlyFee <= detectedBudget) {
+            score += 20;
+            const savings = detectedBudget - t.monthlyFee;
+            if (savings > 0) {
+              reasons.push(`Saves ৳${savings.toLocaleString()} within budget`);
+            } else {
+              reasons.push("Exact budget match");
+            }
+          } else {
+            const diff = t.monthlyFee - detectedBudget;
+            const penalty = Math.min(25, Math.floor((diff / detectedBudget) * 30));
+            score = Math.max(0, score - penalty);
+            reasons.push(`৳${diff.toLocaleString()} above target budget`);
+          }
+        } else {
+          score += 10;
+        }
+
+        // Mode match (up to 10 pts)
+        if (detectedMode) {
+          if (t.mode === detectedMode) {
+            score += 10;
+            reasons.push(`Offers preferred ${t.mode} sessions`);
+          }
+        } else {
+          score += 5;
+        }
+
+        // Rating & Educator quality bonus (up to 10 pts)
+        if (avgRating >= 4.5) {
+          score += 10;
+          reasons.push(`Top-Rated Educator (${avgRating}★ from ${totalReviews || "verified"} reviews)`);
+        } else if (avgRating >= 4.0) {
+          score += 5;
+          reasons.push(`Rated ${avgRating}★ by students`);
+        }
+
+        const finalScore = Math.min(99, Math.max(15, score));
+
+        return {
+          tuition: {
+            ...t,
+            averageRating: avgRating,
+            totalReviews,
+          },
+          matchScore: finalScore,
+          matchReasons: reasons,
+        };
+      })
+    );
+
+    scoredTuitions.sort((a, b) => b.matchScore - a.matchScore);
+
+    const summaryParts = [];
+    if (detectedSubject) summaryParts.push(`Subject: ${detectedSubject}`);
+    if (detectedClassLevel) summaryParts.push(`Class: ${detectedClassLevel}`);
+    if (detectedBudget) summaryParts.push(`Budget: ≤৳${detectedBudget.toLocaleString()}`);
+    if (detectedMode) summaryParts.push(`Mode: ${detectedMode}`);
+
+    const aiSummary = summaryParts.length > 0
+      ? `AI matched ${scoredTuitions.length} tutors based on: ${summaryParts.join(" • ")}`
+      : `AI analyzed your requirements and suggested the top-rated tutors on MentorLagbe.`;
+
+    res.json({
+      analysis: {
+        extractedPrompt: prompt.trim(),
+        detectedSubject: detectedSubject || "Any Subject",
+        detectedClassLevel: detectedClassLevel || "All Classes",
+        detectedBudget: detectedBudget || null,
+        detectedMode: detectedMode || "Any Format",
+        aiSummary,
+      },
+      matches: scoredTuitions.slice(0, 8),
+    });
+  } catch (error) {
+    console.error("AI Match error:", error);
+    res.status(500).json({ message: "Failed to process AI tutor matching" });
+  }
+});
+
 // GET /api/tuitions/:id — public details (approved + active, or owner/admin preview)
 router.get("/:id", async (req, res) => {
   try {
