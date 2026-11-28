@@ -70,6 +70,147 @@ router.get("/stats", async (req, res) => {
   }
 });
 
+// GET /api/admin/analytics — Charts data: revenue trends, user growth, popular subjects
+router.get("/analytics", async (req, res) => {
+  try {
+    // 1. Revenue Trends (last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+    sixMonthsAgo.setDate(1);
+    sixMonthsAgo.setHours(0, 0, 0, 0);
+
+    const revenueByMonth = await Payment.aggregate([
+      {
+        $match: {
+          paymentStatus: "paid",
+          paidAt: { $gte: sixMonthsAgo },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$paidAt" },
+            month: { $month: "$paidAt" },
+            currency: { $toLower: { $ifNull: ["$currency", "usd"] } },
+          },
+          total: { $sum: "$amount" },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } },
+    ]);
+
+    // Payment methods breakdown
+    const revenueByMethod = await Payment.aggregate([
+      { $match: { paymentStatus: "paid" } },
+      {
+        $group: {
+          _id: { $ifNull: ["$paymentMethod", "stripe"] },
+          total: { $sum: "$amount" },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // 2. User Growth by Month (last 6 months)
+    const userGrowthByMonth = await User.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: sixMonthsAgo },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$createdAt" },
+            month: { $month: "$createdAt" },
+            role: "$role",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } },
+    ]);
+
+    // 3. Popular Subjects (Top 7)
+    const popularSubjects = await Tuition.aggregate([
+      { $match: { approvalStatus: "approved" } },
+      {
+        $group: {
+          _id: "$subject",
+          totalTuitions: { $sum: 1 },
+        },
+      },
+      { $sort: { totalTuitions: -1 } },
+      { $limit: 7 },
+    ]);
+
+    // Applications by subject
+    const subjectApplications = await Application.aggregate([
+      {
+        $group: {
+          _id: "$subject",
+          totalApplications: { $sum: 1 },
+        },
+      },
+      { $sort: { totalApplications: -1 } },
+      { $limit: 7 },
+    ]);
+
+    // Last 6 months labels
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthlyRevenue = [];
+    const monthlyUsers = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1; // 1-12
+      const label = `${monthNames[m - 1]} '${String(y).slice(2)}`;
+
+      // Revenue
+      const revItems = revenueByMonth.filter((r) => r._id.year === y && r._id.month === m);
+      let usd = 0;
+      let bdt = 0;
+      for (const item of revItems) {
+        if (item._id.currency === "bdt") bdt += item.total;
+        else usd += item.total;
+      }
+      monthlyRevenue.push({ label, year: y, month: m, usd, bdt, totalUsdEquivalent: usd + Math.round(bdt / 120) });
+
+      // Users
+      const userItems = userGrowthByMonth.filter((u) => u._id.year === y && u._id.month === m);
+      let students = 0;
+      let tutors = 0;
+      let admins = 0;
+      for (const item of userItems) {
+        if (item._id.role === "tutor") tutors += item.count;
+        else if (item._id.role === "student") students += item.count;
+        else admins += item.count;
+      }
+      monthlyUsers.push({ label, year: y, month: m, students, tutors, total: students + tutors + admins });
+    }
+
+    res.json({
+      revenueTrends: monthlyRevenue,
+      paymentMethods: revenueByMethod.map((pm) => ({ method: pm._id, total: pm.total, count: pm.count })),
+      userGrowth: monthlyUsers,
+      popularSubjects: popularSubjects.map((ps) => {
+        const appMatch = subjectApplications.find((sa) => sa._id === ps._id);
+        return {
+          subject: ps._id,
+          tuitions: ps.totalTuitions,
+          applications: appMatch?.totalApplications || 0,
+        };
+      }),
+    });
+  } catch (error) {
+    console.error("GET /api/admin/analytics error:", error);
+    res.status(500).json({ message: "Failed to fetch admin analytics" });
+  }
+});
+
 // GET /api/admin/users — সব users
 router.get("/users", async (req, res) => {
   try {
